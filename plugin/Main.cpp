@@ -3,16 +3,20 @@
 #include "ICommands.h"
 #include "Logger/Logger.h"
 #include "Requests.h"
-#include "json.hpp"
+#include "phase2/Foundation.h"
+#include "phase2/Inventory.h"
+#include "phase2/NpcSurvey.h"
+#include "phase2/NpcTrial.h"
+#include "phase2/Terrain.h"
 
 #include <algorithm>
-#include <array>
 #include <chrono>
+#include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <cstddef>
-#include <numbers>
 #include <objbase.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -25,7 +29,7 @@ constexpr char BaseUrl[] = "http://127.0.0.1:8765";
 constexpr char PluginName[] = "AsaCivilizationPhase1";
 constexpr std::size_t MaxReply = 16'384;
 constexpr std::size_t MaxTraces = 8;
-using Trace = std::array<double, 4>;
+using Phase2::Trace;
 
 struct State {
     std::string bootId;
@@ -40,6 +44,13 @@ struct State {
     bool inFlight{};
     bool connected{};
     bool inspectFoundation{};
+    bool surveyWater{};
+    std::string foundationAction;
+    std::string inventoryAction;
+    std::optional<Phase2::NpcSurvey> npcSurvey;
+    std::optional<Phase2::NpcTrial> npcTrial;
+    unsigned trialStructureId{};
+    bool mirrorInventory{};
 };
 State state;
 
@@ -71,80 +82,6 @@ void Disconnected() {
 
 Json Envelope() {
     return {{"protocol", 1}, {"world_id", "phase1"}, {"boot_id", state.bootId}};
-}
-
-Json TraceColumn(UWorld* world, const Trace& column, UScriptStruct* hitType) {
-    // The AsaApi FHitResult wrapper exposes offsets and has no native storage of its own.
-    alignas(64) std::array<std::byte, 1024> storage{};
-    auto* hit = reinterpret_cast<FHitResult*>(storage.data());
-    hitType->InitializeStruct(hit, 1);
-    struct Cleanup {
-        UScriptStruct* type;
-        FHitResult* hit;
-        ~Cleanup() { type->DestroyStruct(hit, 1); }
-    } cleanup{hitType, hit};
-
-    const FVector start(column[0], column[1], column[2]);
-    const FVector end(column[0], column[1], column[3]);
-    Json result = {{"trace_cm", column}, {"status", "unobserved"}};
-    if (!UVictoryCore::VTraceSingleBP(world, hit, &start, &end, ECollisionChannel::ECC_Visibility,
-                                      0, FName{}, false, nullptr, 0.f))
-        return result;
-
-    const auto& point = hit->ImpactPointField();
-    // The SDK forward-declares FVector_NetQuantizeNormal. Read its UE double-vector base.
-    const auto& normal = *GetNativePointerField<const FVector*>(hit, "FHitResult.ImpactNormal");
-    result["point_cm"] = {point.X, point.Y, point.Z};
-    result["normal"] = {normal.X, normal.Y, normal.Z};
-    result["status"] = "unclassified_hit";
-    if (auto* component = hit->ComponentField().Get()) {
-        result["component"] = component->ClassField()->NameField().ToString().ToStringUTF8();
-        if (auto* owner = component->OwnerPrivateField()) {
-            auto* ownerClass = owner->ClassField();
-            result["actor_class"] = ownerClass->NameField().ToString().ToStringUTF8();
-            if (auto* landscapeClass = ALandscapeProxy::StaticClass()) {
-                if (ownerClass->IsChildOf(landscapeClass) && !hit->bStartPenetrating().Get() &&
-                    std::abs(normal.SizeSquared() - 1.0) <= 0.02 && normal.Z > 0.0) {
-                    result["status"] = "landscape";
-                    result["slope_deg"] = std::acos(std::clamp(normal.Z, 0.0, 1.0))
-                        * 180.0 / std::numbers::pi;
-                } else {
-                    result["status"] = "blocked";
-                }
-            }
-        }
-    }
-    return result;
-}
-
-Json ObserveTerrain(UWorld* world) {
-    Json results = Json::array();
-    auto* hitType = FindScriptStruct(L"/Script/Engine.HitResult");
-    if (!hitType || hitType->PropertiesSizeField() <= 0 || hitType->PropertiesSizeField() > 1024 ||
-        hitType->MinAlignmentField() <= 0 || 64 % hitType->MinAlignmentField() != 0)
-        throw std::runtime_error("unexpected native HitResult layout");
-    for (const auto& trace : state.traces)
-        results.push_back(TraceColumn(world, trace, hitType));
-    return results;
-}
-
-void InspectFoundation() {
-    constexpr auto itemPath = L"/Game/PrimalEarth/CoreBlueprints/Items/Structures/Wooden/"
-                              L"PrimalItemStructure_WoodFloor.PrimalItemStructure_WoodFloor_C";
-    auto* itemClass = TSoftClassPtr<UPrimalItem>(itemPath).LoadSynchronous();
-    if (!itemClass)
-        throw std::runtime_error("wood foundation item class unavailable");
-    auto* item = static_cast<UPrimalItem*>(itemClass->GetDefaultObject(false));
-    if (!item)
-        throw std::runtime_error("wood foundation item defaults unavailable");
-    const auto& reference = item->StructureToBuildField();
-    auto* structureClass = reference.LoadSynchronous();
-    if (!structureClass)
-        throw std::runtime_error("wood foundation structure class unavailable");
-    FString structurePath;
-    auto path = reference.ToSoftObjectPath();
-    path.ToString(&structurePath);
-    Log::GetLog()->info("Wood foundation structure resolved: {}", structurePath.ToStringUTF8());
 }
 
 // This callback is delivered by AsaApi on its tick path. The response is a small envelope.
@@ -218,10 +155,30 @@ void Tick(float) {
     if (!world || !gameMode)
         return;
 
+    if (state.npcSurvey)
+        state.npcSurvey->Tick(world, gameMode);
+    if (state.npcTrial)
+        state.npcTrial->Tick(world, gameMode);
+    if (!state.foundationAction.empty()) {
+        const auto action = std::exchange(state.foundationAction, {});
+        try {
+            Phase2::RunFoundationProbe(world, gameMode, action, state.trialStructureId);
+        } catch (const std::exception& error) {
+            Log::GetLog()->error("Foundation probe rejected: {}", error.what());
+        }
+    }
+    if (!state.inventoryAction.empty()) {
+        const auto action = std::exchange(state.inventoryAction, {});
+        try {
+            Phase2::RunInventoryProbe(world, gameMode, action, state.trialStructureId);
+        } catch (const std::exception& error) {
+            Log::GetLog()->error("Inventory trial rejected: {}", error.what());
+        }
+    }
     if (state.inspectFoundation) {
         state.inspectFoundation = false;
         try {
-            InspectFoundation();
+            Phase2::LoadFoundationClass();
         } catch (const std::exception& error) {
             Log::GetLog()->error("Wood foundation inspection failed: {}", error.what());
         }
@@ -248,9 +205,22 @@ void Tick(float) {
                 {"map", map.ToString()}, {"game_seconds", static_cast<double>(world->TimeSecondsField())},
                 {"players", players}
             };
+            if (state.mirrorInventory) {
+                try {
+                    const int wood = Phase2::ObserveTrialWood(world, gameMode, state.trialStructureId);
+                    state.pending["snapshot"]["inventory"] = {
+                        {"structure_id", state.trialStructureId}, {"wood", wood}
+                    };
+                } catch (const std::exception& error) {
+                    Log::GetLog()->warn("Inventory observation unavailable: {}", error.what());
+                    state.pending = nullptr;
+                    state.next = Clock::now() + 2s;
+                    return;
+                }
+            }
             if (state.ack == 0 && !state.traces.empty()) {
                 try {
-                    state.pending["snapshot"]["terrain"] = ObserveTerrain(world);
+                    state.pending["snapshot"]["terrain"] = Phase2::ObserveTerrain(world, state.traces, state.surveyWater);
                 } catch (const std::exception& error) {
                     Log::GetLog()->error("Terrain observation failed: {}", error.what());
                 }
@@ -276,6 +246,25 @@ void Initialize() {
     state.token = Env("ASA_PHASE1_TOKEN");
     state.build = Env("ASA_PHASE1_SERVER_BUILD");
     state.inspectFoundation = Env("ASA_PHASE2_INSPECT_FOUNDATION") == "1";
+    state.surveyWater = Env("ASA_PHASE2_SURVEY_WATER") == "1";
+    state.foundationAction = Env("ASA_PHASE2_FOUNDATION_POC");
+    state.inventoryAction = Env("ASA_PHASE2_INVENTORY_POC");
+    if (Env("ASA_PHASE2_HUMAN_NPC_SURVEY") == "1")
+        state.npcSurvey.emplace();
+    if (Env("ASA_PHASE2_HUMAN_NPC_TRIAL") == "1")
+        state.npcTrial.emplace();
+    if (!state.foundationAction.empty() && !state.inventoryAction.empty())
+        throw std::runtime_error("enable only one trial per boot");
+    state.mirrorInventory = Env("ASA_PHASE2_INVENTORY_MIRROR") == "1";
+    const auto id = Env((state.inventoryAction.empty() && !state.mirrorInventory)
+                        ? "ASA_PHASE2_FOUNDATION_ID" : "ASA_PHASE2_INVENTORY_ID");
+    if (!id.empty()) {
+        const auto [end, error] = std::from_chars(id.data(), id.data() + id.size(), state.trialStructureId);
+        if (error != std::errc{} || end != id.data() + id.size())
+            throw std::runtime_error("invalid Phase 2 trial structure ID");
+    }
+    if (state.mirrorInventory && (!state.trialStructureId || !state.foundationAction.empty()))
+        throw std::runtime_error("inventory mirror requires a trial inventory ID");
     if (state.token.size() < 16 || state.token.size() > 128 ||
         !std::all_of(state.token.begin(), state.token.end(), [](char ch) {
             return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9');

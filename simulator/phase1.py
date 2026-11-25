@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import os
+import sqlite3
 import time
 import uuid
 
@@ -30,11 +31,12 @@ class Exchange:
 
 
 class Bridge:
-    def __init__(self, world_id, traces=()):
+    def __init__(self, world_id, traces=(), inventory_mirror=None):
         if len(traces) > MAX_TRACES or not all(map(valid_trace, traces)):
             raise ValueError("Use up to eight traces in UE cm, each with z_high > z_low")
         self.world_id = world_id
         self.traces = [list(trace) for trace in traces]
+        self.inventory_mirror = inventory_mirror
         self.session = None
 
     def handle(self, path, body):
@@ -53,7 +55,14 @@ class Bridge:
 
         if path == "/v1/hello":
             if self.session is None or self.session.boot_id != boot_id:
-                self.session = Exchange(boot_id, str(uuid.uuid4()))
+                try:
+                    cursor = self.inventory_mirror.resume(boot_id) if self.inventory_mirror else 0
+                except ValueError:
+                    return 409, {"error": "inventory_reconciliation_rejected"}
+                except sqlite3.Error:
+                    logging.exception("inventory cursor unavailable")
+                    return 503, {"error": "inventory_persistence_unavailable"}
+                self.session = Exchange(boot_id, str(uuid.uuid4()), ack=cursor)
                 logging.info("hello boot=%s server_build=%r api_version=%r", boot_id,
                              str(body.get("server_build", ""))[:80],
                              str(body.get("api_version", ""))[:32])
@@ -81,8 +90,16 @@ class Bridge:
                        for result, trace in zip(terrain, self.traces, strict=True))
             ):
                 return 400, {"error": "invalid_terrain"}
-            if seq == session.ack and snapshot != session.last_snapshot:
+            if seq == session.ack and session.last_snapshot is not None and snapshot != session.last_snapshot:
                 return 409, {"error": "sequence_payload_mismatch"}
+            if self.inventory_mirror is not None:
+                try:
+                    self.inventory_mirror.observe(boot_id, seq, snapshot.get("inventory"))
+                except ValueError:
+                    return 409, {"error": "inventory_reconciliation_rejected"}
+                except sqlite3.Error:
+                    logging.exception("inventory commit failed")
+                    return 503, {"error": "inventory_persistence_unavailable"}
             if seq == session.ack + 1:
                 session.ack = seq
                 session.last_snapshot = snapshot
@@ -161,10 +178,10 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-def make_server(world_id, token, port, traces=()):
+def make_server(world_id, token, port, traces=(), inventory_mirror=None):
     if not token or not token.isascii() or not token.isalnum() or not 16 <= len(token) <= 128:
         raise ValueError("ASA_PHASE1_TOKEN must be 16–128 ASCII letters/digits")
-    bridge = Bridge(world_id, traces)
+    bridge = Bridge(world_id, traces, inventory_mirror)
     server = HTTPServer(("127.0.0.1", port), Handler)
     server.authorization = f"Bearer {token}".encode("ascii")
     server.bridge = bridge
@@ -177,12 +194,20 @@ def main():
     parser.add_argument("--port", default=8765, type=int)
     parser.add_argument("--trace", nargs=4, type=float, action="append", default=[],
                         metavar=("X", "Y", "Z_HIGH", "Z_LOW"))
+    parser.add_argument("--inventory-database")
+    parser.add_argument("--inventory-id", type=int)
     args = parser.parse_args()
     logging.Formatter.converter = time.gmtime
     logging.basicConfig(level=logging.INFO, format="%(asctime)sZ %(message)s")
     try:
-        server = make_server(args.world, os.environ.get("ASA_PHASE1_TOKEN", ""), args.port, args.trace)
-    except (OSError, ValueError) as error:
+        if (args.inventory_database is None) != (args.inventory_id is None):
+            raise ValueError("Specify --inventory-database and --inventory-id together")
+        mirror = None
+        if args.inventory_database is not None:
+            from .inventory_mirror import open_mirror
+            mirror = open_mirror(args.inventory_database, args.inventory_id)
+        server = make_server(args.world, os.environ.get("ASA_PHASE1_TOKEN", ""), args.port, args.trace, mirror)
+    except (OSError, ValueError, sqlite3.Error) as error:
         parser.error(str(error))
     with server:
         logging.info("listening on %s:%d world=%r", *server.server_address, args.world)

@@ -14,7 +14,8 @@ if(NOT EXISTS "${ASA_PUBLIC}/API/ARK/Ark.h" OR NOT EXISTS "${ASAAPI_LIB}"
     message(FATAL_ERROR "Set ASAAPI_SOURCE, ASAAPI_LIB and FMT_INCLUDE to the pinned dependencies")
 endif()
 
-add_library(AsaCivilizationPhase1 SHARED Main.cpp)
+add_library(AsaCivilizationPhase1 SHARED Main.cpp phase2/Terrain.cpp phase2/Foundation.cpp
+    phase2/TrialSite.cpp phase2/Inventory.cpp phase2/NpcSurvey.cpp phase2/NpcTrial.cpp)
 target_compile_features(AsaCivilizationPhase1 PRIVATE cxx_std_20)
 target_include_directories(AsaCivilizationPhase1 PRIVATE "${ASA_PUBLIC}" "${ASA_PUBLIC}/API/UE" "${FMT_INCLUDE}")
 target_compile_definitions(AsaCivilizationPhase1 PRIVATE UNICODE _UNICODE NOMINMAX FMT_HEADER_ONLY)
