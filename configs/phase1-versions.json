@@ -1,0 +1,19 @@
+{
+  "steam_app_id": 2430930,
+  "server_build": "26749470",
+  "server_version": "98.9",
+  "server_executable_sha256": "6434fe81cc0c950e0ee9a84c3f98c0fb010388339e097e33790200ef9432c6fb",
+  "asaapi": {
+    "tag": "2.11",
+    "commit": "bd376a0422291b0b1bf15a0b7868e7e275605da9",
+    "archive": "AsaApi_2.11.zip",
+    "sha256": "64f5f1165ef73f3439bba3794e77e379489167cc385c0ac5c4717ca60ad3e88a",
+    "source_sha256": "e179b1de7037ea48e69531e4aac75e02126fa63a8054cc32236f818a20ea95bc"
+  },
+  "fmt": {
+    "tag": "12.1.0",
+    "sha256": "e6a2b43c6ec4779fb53b15b705f7c20b4eb9d5ae35784d610ac6daec30737019"
+  },
+  "mods": [],
+  "python": "3.12"
+}

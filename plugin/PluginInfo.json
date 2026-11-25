@@ -1,0 +1,7 @@
+{
+  "FullName": "ASA Civilization Phase 1",
+  "Description": "Read-only dedicated server observations over loopback",
+  "Version": 1.0,
+  "MinApiVersion": 2.11,
+  "Dependencies": []
+}

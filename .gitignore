@@ -1,0 +1,34 @@
+# Build and runtime output
+.vs/
+build/
+bin/
+obj/
+__pycache__/
+.venv/
+*.dll
+*.exe
+*.lib
+*.pdb
+*.pak
+*.ucas
+*.utoc
+*.uasset
+*.umap
+*.ark
+*.arkprofile
+*.arktribe
+*.db
+*.db-*
+*.sqlite*
+*.zip
+*.log
+Saved/
+steamapps/
+runtime/
+artifacts/
+
+# Local settings and secrets
+.env
+.env.*
+!.env.example
+configs/local/
