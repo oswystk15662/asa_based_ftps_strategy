@@ -10,9 +10,9 @@ ASA との読み取り接続とは独立に、サンプル地形で集落・道�
 $python = uv python find --offline 3.12
 $db = Join-Path $env:TEMP ("asa-estuary-" + [guid]::NewGuid() + ".sqlite")
 & $python -m simulator.civilization --database $db --scenario configs/estuary-demo.json --ticks 16
-& $python -m simulator.civilization --database $db --ticks 16
+& $python -m simulator.civilization --database $db --ticks 16 --focus Quarry
 & $python -m unittest discover -s tests -v
-& $python -m benchmarks.benchmark_civilization --ticks 80
+& $python -m benchmarks.benchmark_civilization --ticks 80 --cities 120
 ```
 
 Linux では `python3.12` と書き込み可能な DB パスで同じモジュールを実行できる。GitHub Actions の Windows Server 2025 と Ubuntu 24.04 で、Python 3.12 の同じテスト 10 件が通過した。 [実行結果](https://github.com/oswystk15662/asa_based_ftps_strategy/actions/runs/45622168516)
@@ -22,13 +22,15 @@ Linux では `python3.12` と書き込み可能な DB パスで同じモジュ�
 | Phase | 一連のシナリオで確認できる機能 | 実機・拡張で残る機能 |
 |---|---|---|
 | 2 | 独立ワールドで地表トレース、木の土台の生成・削除・保存、小型収納箱の木材を外部 SQLite へ反映 | 通常建築・プレイヤー別の権限、遠隔区画の実体操作、人間型 NPC の移動 |
-| 3 | 採集・食料・人口、土台の資材予約、仮想セルが占有済みなら予約解除 | ASA の現物状態・台帳との照合、NPC の作業 |
-| 4 | 斜面のコスト、水域・障害物・未観測セルの回避。Dijkstra 法で経路探索し、既存道路を優先 | 実機での地形への適合、道路網全体の最適化、耐久・維持管理 |
-| 5 | 到着予定・道路容量付き物流、資材を消費する精錬と発電施設 | ASA の設備・レシピ・電力との一致、複数品種の同時最適化 |
-| 6 | 地形コストに基づく領域配分、資源不足による関係悪化、対立中の取引停止と抽象損耗 | 動的な国境や外交戦略、ASA の実勢力と部隊の接続 |
-| 7 | 観測対象の毎 tick 更新と遠隔都市の 4 tick 集約、SQLite 復元、30 都市ベンチマーク | 個体・実体の詳細度遷移、時間予算に基づく調整、実機規模測定 |
+| 3 | 人口に応じた採集担当の配分、食料と人口、土台の資材予約と占有時の予約解除 | ASA の現物状態・台帳との照合、NPC の作業 |
+| 4 | 斜面・水域・障害物を考慮した経路、既存道路の優先、通行止め時の新規輸送の迂回と輸送中の待機 | 実機での地形への適合、道路網全体の最適化、耐久・維持管理 |
+| 5 | 容量予約付き輸送。精錬の倍量処理で発電燃料も計上し、燃料不足時に通常処理へ戻る | ASA の設備・レシピ・電力との一致、複数品種の同時最適化 |
+| 6 | 初期同盟、食料不足による対立、第三勢力からの物資到着による停戦。対立中は当事者間の新規輸送を停止 | 動的な国境や外交戦略、ASA の実勢力と部隊の接続 |
+| 7 | `--focus` で都市を毎 tick 更新と 4 tick 集約の間で切替。SQLite 復元と複数規模の計測 | 個体・実体の詳細度遷移、時間予算に基づく調整、実機規模測定 |
 
-コードは `simulator/civilization/` に配置。初期化は `scenario.py`、地形と領域は `terrain.py`、建設と生産は `economy.py`、輸送は `logistics.py`、tick と資源収支は `simulation.py`、SQLite は `storage.py` が担当する。再配置前後で 80 tick の状態とイベント履歴が一致することを確認した。
+コードは `simulator/civilization/` に配置。初期化は `scenario.py`、地形と領域は `terrain.py`、建設と生産は `economy.py`、輸送は `logistics.py`、外交は `diplomacy.py`、tick と資源収支は `simulation.py`、SQLite は `storage.py` が担当する。v1 の DB は次の tick で v2 の計算規則に進み、切替を `model_upgraded` に記録する。
+
+シナリオ JSON の `road_closures` には、例えば `{"from":[0,0],"to":[1,0],"start":2,"end":4}` を配列に入れる。隣接区間が tick 2 から 3 の間閉じ、tick 4 に開く。輸送中の荷は経路を予約したまま待機し、開通後に進む。`alliances` には初期同盟を結ぶ勢力のペアを指定する。例は `[["Estuary","Upland"]]`。
 
 在庫・輸送中・建設予約を足した資源総量が、採集・消費・加工の明示差分に一致するか毎 tick チェックする。状態とイベントの書き込みを SQLite の同一トランザクションで確定する。中断や書き込みエラーでは、その tick の変更全体をロールバックする。Windows で、連続 32 tick と再起動を挟んだ 32 tick の状態・イベント列が一致した。
 
@@ -36,4 +38,14 @@ Linux では `python3.12` と書き込み可能な DB パスで同じモジュ�
 
 ## ベンチマーク
 
-2026-11-25 JST、Windows、Python 3.12.11。食料不足のある 30 都市、初期人口 30,000、ディスク上の SQLite で 80 tick を再生した。DB の読み書きを含む 1 tick の中央値は 54.4 ms、最大は 99.0 ms。終了時は道路 252 区間、輸送中 7 件。経路探索に上限がなかった試作では同じ入力で中央値 624.4 ms、最大 733.9 ms を観測した。上限の導入で候補先と道路網も変わるため、経路解の同等性や ASA 実体数の上限はこの比較からは判断できない。
+2026-11-25 JST、Windows、Python 3.12.11、モデル v2。各都市の初期人口は 1,000。食料不足を含む合成地図で各 80 tick を実行した。時間にはディスク上の SQLite の読み書きを含む。
+
+| 都市数 | 中央値 (ms) | p95 (ms) | 最大 (ms) |
+|---:|---:|---:|---:|
+| 15 | 15.9 | 23.2 | 31.1 |
+| 30 | 20.0 | 26.6 | 29.4 |
+| 60 | 27.1 | 41.2 | 135.3 |
+| 120 | 59.8 | 87.5 | 133.8 |
+| 240 | 108.6 | 194.5 | 260.2 |
+
+数値は外部シミュレーターの処理時間。ASA の実体数、サーバーのフレーム時間、クライアント同居時の負荷の上限は別途測定する。

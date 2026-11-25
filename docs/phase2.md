@@ -48,9 +48,10 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 | ID 指定の削除 | クラス・ID・個数照合後に削除し、同期保存 |
 | 削除後の再起動 | 同じ試験区画で地表を再確認し、構造物 0 個 |
 | 同期保存直後の強制終了 | 追試の土台 ID 3271002 を保存してから検証プロセスを強制終了。再起動後も同じ ID の土台が 1 個。検証後に削除し、再起動して 0 個を照合 |
+| 明示保存前の強制終了 | `place-unsaved` でアクター ID 221420427 を生成した直後に `Stop-Process -Force`。ワールドファイルのハッシュには差があったが、再起動後の区画は 0 個だった。永続化は再観測で判定した |
 | 耐久と衝突の追試 | ID 454007828 は生成時・再起動後とも `GetHealth` と `GetMaxHealth` が 0、所有プレイヤー ID 0。再起動後、土台中央の Visibility トレースは土台に当たらず、地形 Z −14421.93 cm に到達した。ID 指定で削除し、再起動後に 0 個を照合 |
 
-試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合は試験用アクターの範囲。現在の無人生成経路は PoC 05 の耐久・衝突条件を満たさないため、通常建築経路の検証が必要。 [ASA 耐久取得の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L94-L98)
+試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`place-unsaved`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`place-unsaved` は明示保存前の異常終了を再現するための操作。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合は試験用アクターの範囲。現在の無人生成経路は PoC 05 の耐久・衝突条件を満たさないため、通常建築経路の検証が必要。 [ASA 耐久取得の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L94-L98)
 
 プラグインは `plugin/phase2/Terrain.cpp` が地形・水域、`plugin/phase2/Foundation.cpp` が土台のクラス解決・配置・保存照合を担当し、`plugin/Main.cpp` が起動とブリッジの制御を持つ。
 

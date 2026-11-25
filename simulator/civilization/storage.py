@@ -2,7 +2,7 @@
 import json
 import sqlite3
 
-from .scenario import MODEL_VERSION, initialize
+from .scenario import MODEL_VERSION, initialize, validate_focus
 from .simulation import Simulation
 
 
@@ -31,18 +31,29 @@ def load_world(db):
     if not row:
         raise ValueError("Initialize a scenario first")
     state = json.loads(row[0])
-    if state["model"] != MODEL_VERSION:
+    if state["model"] not in (1, MODEL_VERSION):
         raise ValueError("Simulation model version mismatch")
     return state
 
 
-def advance(db, ticks):
+def advance(db, ticks, *, focus=None):
     if type(ticks) is not int or ticks < 0:
         raise ValueError("Ticks must be a nonnegative integer")
-    for _ in range(ticks):
+    if focus is not None and ticks == 0:
+        raise ValueError("A focus change requires at least one tick")
+    for index in range(ticks):
         with db:
             db.execute("BEGIN IMMEDIATE")
-            state, events = Simulation(load_world(db)).step()
+            sim = Simulation(load_world(db))
+            if sim.state["model"] == 1:
+                sim.state["model"] = MODEL_VERSION
+                sim.event("model_upgraded", previous=1, model=MODEL_VERSION)
+            if index == 0 and focus is not None:
+                selected = validate_focus(sim.cities, focus)
+                if selected != sim.state["focus"]:
+                    sim.state["focus"] = selected
+                    sim.event("focus_changed", cities=selected)
+            state, events = sim.step()
             db.execute("UPDATE world SET state = ? WHERE singleton = 1", (json.dumps(state, sort_keys=True),))
             db.executemany("INSERT INTO events VALUES (?, ?, ?)", (
                 (state["tick"], i, json.dumps(event, sort_keys=True))

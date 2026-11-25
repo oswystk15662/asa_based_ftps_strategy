@@ -12,7 +12,7 @@ def road_key(a, b):
     return "|".join(sorted((tile_key(a), tile_key(b))))
 
 
-def shortest_path(grid, roads, start, end, occupied=()):
+def shortest_path(grid, roads, start, end, occupied=(), closed=()):
     start, end = tuple(start), tuple(end)
     for x, y in (start, end):
         if not 0 <= y < len(grid) or not 0 <= x < len(grid[y]) or grid[y][x] not in TERRAIN_COST:
@@ -41,7 +41,10 @@ def shortest_path(grid, roads, start, end, occupied=()):
             terrain = grid[ny][nx]
             if terrain not in TERRAIN_COST:
                 continue
-            candidate = cost + (1 if road_key(cell, next_cell) in roads else TERRAIN_COST[terrain])
+            edge = road_key(cell, next_cell)
+            if edge in closed:
+                continue
+            candidate = cost + (1 if edge in roads else TERRAIN_COST[terrain])
             if candidate >= distance.get(next_cell, float("inf")):
                 continue
             previous[next_cell] = cell

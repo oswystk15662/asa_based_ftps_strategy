@@ -7,11 +7,30 @@ ROAD_CAPACITY = 4
 MAX_ROUTE_ATTEMPTS = 8
 
 
+def closed_edges(sim):
+    closures = sim.state.get("road_closures", ())
+    previous = {entry["edge"] for entry in closures if entry["start"] <= sim.tick - 1 < entry["end"]}
+    current = {entry["edge"] for entry in closures if entry["start"] <= sim.tick < entry["end"]}
+    for edge in sorted(current - previous):
+        sim.event("road_closed", edge=edge)
+    for edge in sorted(previous - current):
+        sim.event("road_reopened", edge=edge)
+    return current
+
+
 def run_logistics(sim):
+    closed = closed_edges(sim)
     reserved = Counter()
     incoming = Counter()
     travelling = []
     for shipment in sim.state["shipments"]:
+        if closed.intersection(shipment["edges"]):
+            shipment["due"] += 1
+            if not shipment.get("waiting"):
+                shipment["waiting"] = True
+                sim.event("shipment_waiting", shipment_id=shipment["id"])
+        elif shipment.pop("waiting", False):
+            sim.event("shipment_resumed", shipment_id=shipment["id"])
         if shipment["due"] <= sim.tick:
             sim.stock(shipment["destination"], shipment["resource"], shipment["units"], "delivery")
             sim.event("delivery", shipment_id=shipment["id"], destination=shipment["destination"])
@@ -21,6 +40,8 @@ def run_logistics(sim):
         incoming[shipment["destination"], shipment["resource"]] += shipment["units"]
         travelling.append(shipment)
     sim.state["shipments"] = travelling
+    unavailable = closed | {edge for edge, units in reserved.items() if units >= ROAD_CAPACITY}
+    occupied = [tuple(city["cell"]) for city in sim.cities.values()]
 
     # shortcut: one prioritized dispatch per tick, expand with a multi-commodity planner after profiling.
     names = sorted(sim.cities)
@@ -45,17 +66,16 @@ def run_logistics(sim):
                 if offer <= 0:
                     continue
                 attempts += 1
-                if dispatch(sim, source, destination, resource, min(offer, deficit), reserved):
+                if dispatch(sim, source, destination, resource, min(offer, deficit), reserved,
+                            occupied, unavailable):
                     return
                 if attempts == MAX_ROUTE_ATTEMPTS:
                     return
 
 
-def dispatch(sim, source, destination, resource, desired, reserved):
+def dispatch(sim, source, destination, resource, desired, reserved, occupied, unavailable):
     origin, dest = sim.cities[source], sim.cities[destination]
-    # Saturated edges may still be traversed by a later shipment after current arrivals.
-    occupied = [tuple(city["cell"]) for city in sim.cities.values()]
-    route = shortest_path(sim.state["grid"], sim.roads, origin["cell"], dest["cell"], occupied)
+    route = shortest_path(sim.state["grid"], sim.roads, origin["cell"], dest["cell"], occupied, unavailable)
     if not route:
         return False
     edges = [road_key(a, b) for a, b in zip(route, route[1:])]

@@ -12,10 +12,17 @@ def advance_city(sim, name, city):
         return
     city["last_economy"] = sim.tick
     stock = city["stock"]
-    labor = max(1, city["population"] // 8)
+    jobs = sorted(resource for resource, capacity in city["capacity"].items() if capacity)
+    workers = {}
+    if jobs:
+        share, remainder = divmod(max(1, city["population"] // 3), len(jobs))
+        workers = {resource: share + (index < remainder) for index, resource in enumerate(jobs)}
+    if workers != city.get("workers", {}):
+        city["workers"] = workers
+        sim.event("workforce", city=name, workers=workers)
     for resource, capacity in sorted(city["capacity"].items()):
         regenerated = min(capacity, city["nodes"][resource] + max(1, capacity // 4) * elapsed)
-        harvest = min(regenerated, labor * elapsed)
+        harvest = min(regenerated, workers.get(resource, 0) * elapsed)
         city["nodes"][resource] = regenerated - harvest
         sim.stock(name, resource, harvest, "harvest", external=True)
     need = max(1, city["population"] // 10) * elapsed
@@ -66,8 +73,15 @@ def build(sim, name, city):
         city["industry"] = "powered"
         sim.event("industry", city=name, stage="powered")
     if city["industry"] != "none" and city["last_economy"] == sim.tick:
-        units = min(stock["ore"] // 2, max(0, stock["wood"] - 2),
-                    2 if city["industry"] == "powered" else 1)
+        fuel = max(0, stock["wood"] - 2)
+        # Power consumes one extra wood while processing a double batch.
+        powered = city["industry"] == "powered" and fuel >= 3 and stock["ore"] >= 4
+        if powered != city.get("power_online", False):
+            city["power_online"] = powered
+            sim.event("power", city=name, online=powered)
+        units = min(stock["ore"] // 2, fuel, 2 if powered else 1)
+        if powered:
+            sim.stock(name, "wood", -1, "power_fuel", external=True)
         sim.stock(name, "ore", -2 * units, "smelt", external=True)
         sim.stock(name, "wood", -units, "smelt", external=True)
         sim.stock(name, "metal", units, "smelt", external=True)

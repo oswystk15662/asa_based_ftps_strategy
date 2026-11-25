@@ -40,13 +40,17 @@ void RunFoundationProbe(UWorld* world, AShooterGameMode* gameMode, std::string_v
         log->info("Foundation destroyed and save requested id={}", expectedId);
         return;
     }
-    if (action != "place" || expectedId)
+    if ((action != "place" && action != "place-unsaved") || expectedId)
         throw std::runtime_error("unknown placement probe action or unexpected ID");
     auto* actor = SpawnAtTrial(world, foundationClass);
     const auto id = actor->StructureIDField();
     nearby = NearbyStructures(world);
     if (!id || nearby.size() != 1 || nearby.front() != actor)
         throw std::runtime_error("spawned foundation did not reconcile uniquely");
+    if (action == "place-unsaved") {
+        log->info("Foundation placed without save id={} count=1", id);
+        return;
+    }
     gameMode->SaveWorld(true, false, false);
     log->info("Foundation placed and save requested id={} count=1 health={} max_health={} owner_player={}",
               id, actor->GetHealth(), actor->GetMaxHealth(), actor->OwningPlayerIDField());
