@@ -15,13 +15,13 @@ $db = Join-Path $env:TEMP ("asa-estuary-" + [guid]::NewGuid() + ".sqlite")
 & $python -m benchmarks.benchmark_civilization --ticks 80
 ```
 
-Linux ではインストール済みの `python3.12` と書き込み可能な DB パスで同じモジュールを実行できる構成。Windows では実行済み。Linux 実機での検証は未実施。
+Linux では `python3.12` と書き込み可能な DB パスで同じモジュールを実行できる。GitHub Actions の Windows Server 2025 と Ubuntu 24.04 で、Python 3.12 の同じテスト 10 件が通過した。 [実行結果](https://github.com/oswystk15662/asa_based_ftps_strategy/actions/runs/45622168516)
 
 ## 現在の範囲
 
 | Phase | 一連のシナリオで確認できる機能 | 実機・拡張で残る機能 |
 |---|---|---|
-| 2 | ASA 上の地表トレースと木の土台のクラス解決 | 安全な配置・削除・保存、在庫や所属の同期、人間型 NPC の制御 |
+| 2 | 独立ワールドで地表トレース、木の土台の生成・削除・保存、小型収納箱の木材を外部 SQLite へ反映 | 通常建築・プレイヤー別の権限、遠隔区画の実体操作、人間型 NPC の移動 |
 | 3 | 採集・食料・人口、土台の資材予約、仮想セルが占有済みなら予約解除 | ASA の現物状態・台帳との照合、NPC の作業 |
 | 4 | 斜面のコスト、水域・障害物・未観測セルの回避。Dijkstra 法で経路探索し、既存道路を優先 | 実機での地形への適合、道路網全体の最適化、耐久・維持管理 |
 | 5 | 到着予定・道路容量付き物流、資材を消費する精錬と発電施設 | ASA の設備・レシピ・電力との一致、複数品種の同時最適化 |

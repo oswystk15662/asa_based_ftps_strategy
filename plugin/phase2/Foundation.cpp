@@ -29,7 +29,9 @@ void RunFoundationProbe(UWorld* world, AShooterGameMode* gameMode, std::string_v
             !expectedId || nearby.front()->StructureIDField() != expectedId)
             throw std::runtime_error("managed foundation ID and site did not reconcile");
         if (action == "verify") {
-            log->info("Foundation verified id={} count=1", expectedId);
+            auto* actor = nearby.front();
+            log->info("Foundation verified id={} count=1 health={} max_health={} owner_player={}",
+                      expectedId, actor->GetHealth(), actor->GetMaxHealth(), actor->OwningPlayerIDField());
             return;
         }
         if (!nearby.front()->Destroy(false, false))
@@ -43,9 +45,10 @@ void RunFoundationProbe(UWorld* world, AShooterGameMode* gameMode, std::string_v
     auto* actor = SpawnAtTrial(world, foundationClass);
     const auto id = actor->StructureIDField();
     nearby = NearbyStructures(world);
-    if (nearby.size() != 1 || nearby.front() != actor)
+    if (!id || nearby.size() != 1 || nearby.front() != actor)
         throw std::runtime_error("spawned foundation did not reconcile uniquely");
     gameMode->SaveWorld(true, false, false);
-    log->info("Foundation placed and save requested id={} count=1", id);
+    log->info("Foundation placed and save requested id={} count=1 health={} max_health={} owner_player={}",
+              id, actor->GetHealth(), actor->GetMaxHealth(), actor->OwningPlayerIDField());
 }
 }  // namespace Phase2

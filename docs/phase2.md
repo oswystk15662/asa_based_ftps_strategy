@@ -48,8 +48,9 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 | ID 指定の削除 | クラス・ID・個数照合後に削除し、同期保存 |
 | 削除後の再起動 | 同じ試験区画で地表を再確認し、構造物 0 個 |
 | 同期保存直後の強制終了 | 追試の土台 ID 3271002 を保存してから検証プロセスを強制終了。再起動後も同じ ID の土台が 1 個。検証後に削除し、再起動して 0 個を照合 |
+| 耐久と衝突の追試 | ID 454007828 は生成時・再起動後とも `GetHealth` と `GetMaxHealth` が 0、所有プレイヤー ID 0。再起動後、土台中央の Visibility トレースは土台に当たらず、地形 Z −14421.93 cm に到達した。ID 指定で削除し、再起動後に 0 個を照合 |
 
-試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合はこの試験用土台の範囲。クライアント上での表示、通常建築のスナップ・禁止領域・資源消費、所有権、在庫同期は未検証。
+試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合は試験用アクターの範囲。現在の無人生成経路は PoC 05 の耐久・衝突条件を満たさないため、通常建築経路の検証が必要。 [ASA 耐久取得の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L94-L98)
 
 プラグインは `plugin/phase2/Terrain.cpp` が地形・水域、`plugin/phase2/Foundation.cpp` が土台のクラス解決・配置・保存照合を担当し、`plugin/Main.cpp` が起動とブリッジの制御を持つ。
 
@@ -80,15 +81,17 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 初回試験では Ready 後のおよそ 0・30・90 秒でロード済みキャラクターを 0・15,619・25,186 体観測した。MOD パッケージのキャラクターは 3 回とも 0 体だった。`/Human_NPCs_ASA/Base_Units/` の `ZKs_Base_Man_BP_C` と `ZKs_Base_Female_BP_C` はいずれも ASA 上で `APrimalCharacter` のクラスとして解決できた。
 
+同じ無人ワールドで 0・30・90・180・300 秒に観測する追試を実施。MOD の個体数は 0・0・0・0・6 体。300 秒時点での全キャラクターは 25,669 体。斧・素手の男性型と剣・槍の女性型を (194000, −85000) cm 付近で観測した。素手の男性型は手動生成試験と同一クラス。自然出現の追試では個体を生成・削除していない。
+
 別の新規ワールド `Phase2HumanNPCTrial` で同じ MOD ファイルの `ZKs_Punch_Man_BP_C` を 1 体生成した。生成 3 秒後に AI コントローラーが取得できず、12 秒の観測中に座標は変化しなかった。名前・型・区画を再照合して削除し、2 秒後に 0 体を確認した。使用した名前は同一起動内の試験対象の識別に限定する。 [生成の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/UWorld.h#L168)
 
-`Phase2HumanNPCController` では既定 AI クラスを照合し、`SpawnDefaultController` の明示呼び出しでコントローラーが付いたことを確認した。12 秒間の座標は一定で、削除後は 0 体。追試 `Phase2HumanNPCMove` では生成前に目的地の地表を確認した。AI 初期化のログ直後にサーバープロセスが終了し、`AAIController.MoveToLocation` の戻り値は得られなかった。終了理由は不明。試験コードからこの移動呼び出しを外した。固定ビルドのキャッシュにある ASA の関数シグネチャは公開 UE 宣言より `bool` が一つ多い。 [ASA の既定コントローラー宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APawn.h#L64) [UE の移動 API 宣言](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/AIModule/AAIController/MoveToLocation?application_version=5.8)
+`Phase2HumanNPCController` では `ASA_PHASE2_HUMAN_NPC_TRIAL=1` を設定。既定 AI クラスを照合し、`SpawnDefaultController` の明示呼び出しでコントローラーが付いたことを確認した。12 秒間の座標は一定で、削除後は 0 体。追試 `Phase2HumanNPCMove` では生成前に目的地の地表を確認した。AI 初期化のログ直後にサーバープロセスが終了し、`AAIController.MoveToLocation` の戻り値は得られなかった。終了理由は不明。試験コードからこの移動呼び出しを外し、生成・AI 初期化・削除を再現した。固定ビルドのキャッシュにある ASA の関数シグネチャは公開 UE 宣言より `bool` が一つ多い。 [ASA の既定コントローラー宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APawn.h#L64) [UE の移動 API 宣言](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/AIModule/AAIController/MoveToLocation?application_version=5.8)
 
 ## 残る Phase 2 の実機検証
 
-- PoC 04・05・13。目視と通常建築経路、別区画や未ロード領域、保存の途中で異常終了した場合の照合。
+- PoC 04・05・13。クライアントでの目視、通常建築経路での耐久・衝突・資材消費、別区画や未ロード領域、保存の途中で異常終了した場合の照合。外部シミュレーター上では仮想建設を再生し、占有時の予約解除と再起動後に同じ建設を二重計上しないことを確認した。
 - PoC 08・09。所有・陣営の切り替えとプレイヤーごとの利用権限、電力状態とクライアント表示、在庫変更途中の復旧。
-- PoC 06・07・11。自然出現の追加観測、AI 初期化と移動、プレイヤー接近時の挙動。
+- PoC 06・07・11。外見、プレイヤー接近時の挙動、外部からの移動指示と安定 ID による再起動後の照合。移動は現状の外部シミュレーターで論理的に扱う。
 - PoC 12。無人の既知区画で土台と収納箱を再起動後に観測できた。プレイヤーの接近・離脱に伴う休眠・ロード範囲の変化は未検証。
 
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。
