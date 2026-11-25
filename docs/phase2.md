@@ -32,4 +32,6 @@ $python = uv python find --offline 3.12
 
 木の土台ではアイテム BP の解決と `UPrimalItem.StructureToBuild` の参照を候補にする。アイテムと実際に生成する構造物クラスを実機で照合してから配置を試す。今回の平坦な座標だけで乾地・建築可と判断せず、試験セルで水と占有を別確認する。`ServerRequestPlaceStructure` はプレイヤーコントローラーの経路で、プレイヤー不在時の成功を保証しない。 [クラス解決と内部アクセスの調査](api_research.md)
 
+追試では `ASA_PHASE2_INSPECT_FOUNDATION=1` を指定して、新規の `Phase2FoundationInspect` ワールドで `PrimalItemStructure_WoodFloor_C` の既定値から `/Game/PrimalEarth/Structures/Wooden/Floor_Wood_SM_New.Floor_Wood_SM_New_C` を実際に解決した。`TSoftClassPtr.LoadSynchronous` と `UClass.GetDefaultObject(false)` を使用し、構造物の生成は行っていない。 [アイテムの構造物参照](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/UPrimalItem.h#L152)
+
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。

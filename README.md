@@ -18,6 +18,7 @@ ASA の専用ワールドで、人口・経済・都市・物流・外交を持�
 | [技術検証](docs/poc_plan.md) | PoC 01–14 |
 | [Phase 1 基盤](docs/phase1.md) | ビルド、仮想通信、実機検証 |
 | [Phase 2 地形](docs/phase2.md) | 実機の地形・衝突トレースと建築 PoC の前提 |
+| [外部シミュレーター](docs/simulator.md) | 集落・道路・物流・文明のデモと再現手順 |
 | [ロードマップ](docs/roadmap.md) | 工数、承認事項、Phase 1 の手順 |
 | [リスク](docs/risks.md) | 検証による判断と代替案 |
 | [設計判断](docs/decisions/) | ADR |

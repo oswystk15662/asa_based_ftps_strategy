@@ -1,0 +1,38 @@
+{
+  "grid": [
+    "....~.......",
+    ".^..~...^...",
+    "....~.......",
+    "..^.........",
+    "....~..#....",
+    "....~.......",
+    "....~......."
+  ],
+  "focus": ["Harbor"],
+  "cities": [
+    {
+      "id": "Harbor",
+      "faction": "Estuary",
+      "cell": [1, 2],
+      "population": 32,
+      "stock": {"food": 70, "wood": 55, "ore": 12},
+      "renewal": {"food": 20, "wood": 20, "ore": 12}
+    },
+    {
+      "id": "Quarry",
+      "faction": "Upland",
+      "cell": [6, 2],
+      "population": 24,
+      "stock": {"wood": 10, "ore": 4},
+      "renewal": {"wood": 8, "ore": 20}
+    },
+    {
+      "id": "Terrace",
+      "faction": "Upland",
+      "cell": [10, 2],
+      "population": 16,
+      "stock": {"food": 30, "wood": 12, "ore": 1},
+      "renewal": {"food": 8, "wood": 16}
+    }
+  ]
+}

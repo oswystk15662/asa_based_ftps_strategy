@@ -39,6 +39,7 @@ struct State {
     std::chrono::milliseconds backoff{500};
     bool inFlight{};
     bool connected{};
+    bool inspectFoundation{};
 };
 State state;
 
@@ -127,6 +128,25 @@ Json ObserveTerrain(UWorld* world) {
     return results;
 }
 
+void InspectFoundation() {
+    constexpr auto itemPath = L"/Game/PrimalEarth/CoreBlueprints/Items/Structures/Wooden/"
+                              L"PrimalItemStructure_WoodFloor.PrimalItemStructure_WoodFloor_C";
+    auto* itemClass = TSoftClassPtr<UPrimalItem>(itemPath).LoadSynchronous();
+    if (!itemClass)
+        throw std::runtime_error("wood foundation item class unavailable");
+    auto* item = static_cast<UPrimalItem*>(itemClass->GetDefaultObject(false));
+    if (!item)
+        throw std::runtime_error("wood foundation item defaults unavailable");
+    const auto& reference = item->StructureToBuildField();
+    auto* structureClass = reference.LoadSynchronous();
+    if (!structureClass)
+        throw std::runtime_error("wood foundation structure class unavailable");
+    FString structurePath;
+    auto path = reference.ToSoftObjectPath();
+    path.ToString(&structurePath);
+    Log::GetLog()->info("Wood foundation structure resolved: {}", structurePath.ToStringUTF8());
+}
+
 // This callback is delivered by AsaApi on its tick path. The response is a small envelope.
 void Receive(bool hello, bool ok, const std::string& body) {
     state.inFlight = false;
@@ -198,6 +218,15 @@ void Tick(float) {
     if (!world || !gameMode)
         return;
 
+    if (state.inspectFoundation) {
+        state.inspectFoundation = false;
+        try {
+            InspectFoundation();
+        } catch (const std::exception& error) {
+            Log::GetLog()->error("Wood foundation inspection failed: {}", error.what());
+        }
+    }
+
     const bool hello = !state.connected;
     Json request = Envelope();
     if (hello) {
@@ -246,6 +275,7 @@ void Initialize() {
     state = {};
     state.token = Env("ASA_PHASE1_TOKEN");
     state.build = Env("ASA_PHASE1_SERVER_BUILD");
+    state.inspectFoundation = Env("ASA_PHASE2_INSPECT_FOUNDATION") == "1";
     if (state.token.size() < 16 || state.token.size() > 128 ||
         !std::all_of(state.token.begin(), state.token.end(), [](char ch) {
             return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9');
