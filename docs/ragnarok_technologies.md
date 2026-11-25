@@ -20,6 +20,8 @@ python -m benchmarks.compare_city_technologies --ticks 12
 
 ## Ragnarok Ascended の土地柄案
 
+砂漠の内陸に置く町と、世界開始時の交易は [世界の開始時代とプレイヤーの選択](world_start.md) を参照。
+
 Studio Wildcard が紹介する Ragnarok Ascended の地形をもとにした、このプロジェクト向けの技術・産業案。公式のエングラム一覧や配置座標は、今後 ASA 側で照合する。 [Studio Wildcard のリリース告知](https://survivetheark.com/index.php?/forums/topic/772489-ragnarok-ascended-and-lost-colony-expansion-pass-are-now-live/) [Steam の公式マップ紹介](https://store.steampowered.com/app/3675020/ARK_Ragnarok_Ascended/)
 
 | 地域・地形 | 初期技術・技能案 | 生産・交易を変える効果案 |

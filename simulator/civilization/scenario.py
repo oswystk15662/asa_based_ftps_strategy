@@ -1,9 +1,27 @@
 """Scenario validation and initial world state."""
-from .terrain import TERRAIN_COST, claim_territory, road_key
+from .terrain import TERRAIN_COST, claim_territory, road_key, tile_key
 from .technology import TECHNOLOGY_RESOURCE
 
 MODEL_VERSION = 2
 RESOURCES = ("food", "wood", "ore", "metal")
+
+
+def road_edge(grid, a, b):
+    for cell in (a, b):
+        if not isinstance(cell, list) or len(cell) != 2 or any(type(n) is not int for n in cell):
+            raise ValueError("Invalid road coordinates")
+        x, y = cell
+        if not (0 <= y < len(grid) and 0 <= x < len(grid[y]) and grid[y][x] in TERRAIN_COST):
+            raise ValueError("Roads require traversable cells")
+    if sum(abs(x - y) for x, y in zip(a, b)) != 1:
+        raise ValueError("Roads require adjacent cells")
+    return road_key(a, b)
+
+
+def starting_roads(grid, entries):
+    if not isinstance(entries, list) or any(not isinstance(edge, list) or len(edge) != 2 for edge in entries):
+        raise ValueError("Starting roads must be a list of edges")
+    return sorted({road_edge(grid, a, b) for a, b in entries})
 
 
 def road_closures(grid, entries):
@@ -15,17 +33,9 @@ def road_closures(grid, entries):
         if not isinstance(entry, dict) or not all(field in entry for field in fields):
             raise ValueError("Road closure requires from, to, start and end")
         a, b, start, end = (entry[field] for field in fields)
-        for cell in (a, b):
-            if not isinstance(cell, list) or len(cell) != 2 or any(type(n) is not int for n in cell):
-                raise ValueError("Invalid road closure coordinates")
-            x, y = cell
-            if not (0 <= y < len(grid) and 0 <= x < len(grid[y]) and grid[y][x] in TERRAIN_COST):
-                raise ValueError("Road closure requires traversable cells")
-        if sum(abs(x - y) for x, y in zip(a, b)) != 1 or not (
-            type(start) is int and type(end) is int and 1 <= start < end
-        ):
-            raise ValueError("Road closure requires an adjacent edge and a positive tick interval")
-        closures.append({"edge": road_key(a, b), "start": start, "end": end})
+        if not (type(start) is int and type(end) is int and 1 <= start < end):
+            raise ValueError("Road closure requires a positive tick interval")
+        closures.append({"edge": road_edge(grid, a, b), "start": start, "end": end})
     return sorted(closures, key=lambda entry: (entry["start"], entry["end"], entry["edge"]))
 
 
@@ -43,6 +53,7 @@ def initialize(scenario):
     ):
         raise ValueError("Expected a rectangular terrain grid")
     cities = {}
+    buildings = {}
     used_cells = set()
     for entry in scenario["cities"]:
         name, faction, point = entry["id"], entry["faction"], entry["cell"]
@@ -50,6 +61,8 @@ def initialize(scenario):
         stock = entry.get("stock", {})
         renewal = entry.get("renewal", {})
         technology = entry.get("technology")
+        prebuilt = entry.get("starting_foundation", False)
+        industry = entry.get("starting_industry", "none")
         if not isinstance(name, str) or not name or name in cities or not isinstance(faction, str) or not faction:
             raise ValueError("Each city requires a unique name and a faction")
         if not isinstance(point, list) or len(point) != 2 or any(type(n) is not int for n in point):
@@ -69,11 +82,20 @@ def initialize(scenario):
             raise ValueError("Resource quantities must be nonnegative integers")
         if technology is not None and (not isinstance(technology, str) or technology not in TECHNOLOGY_RESOURCE):
             raise ValueError(f"Unknown starting technology for {name}")
+        if type(prebuilt) is not bool or industry not in ("none", "smelter", "powered"):
+            raise ValueError(f"Invalid starting facilities for {name}")
+        if industry != "none" and not prebuilt:
+            raise ValueError(f"Starting industry requires a foundation for {name}")
+        foundation = None
+        if prebuilt:
+            command = f"foundation:{name}"
+            foundation = {"command_id": command, "status": "built", "cell": point, "wood": 4}
+            buildings[tile_key(point)] = command
         cities[name] = {
             "faction": faction, "cell": point, "population": population,
             "stock": {resource: stock.get(resource, 0) for resource in RESOURCES},
-            "capacity": renewal, "nodes": renewal.copy(), "foundation": None,
-            "industry": "none", "last_economy": 0, "detail": "remote",
+            "capacity": renewal, "nodes": renewal.copy(), "foundation": foundation,
+            "industry": industry, "last_economy": 0, "detail": "remote",
         }
         if technology is not None:
             cities[name]["technology"] = technology
@@ -97,7 +119,8 @@ def initialize(scenario):
             relations.append({"factions": [source, destination], "tension": 0, "status": status})
     return {
         "model": MODEL_VERSION, "tick": 0, "grid": grid, "focus": focus,
-        "cities": cities, "roads": [], "shipments": [], "next_shipment": 1,
-        "relations": relations, "territory": claim_territory(grid, cities), "virtual_buildings": {},
+        "cities": cities, "roads": starting_roads(grid, scenario.get("starting_roads", [])),
+        "shipments": [], "next_shipment": 1,
+        "relations": relations, "territory": claim_territory(grid, cities), "virtual_buildings": buildings,
         "road_closures": road_closures(grid, scenario.get("road_closures", [])),
     }

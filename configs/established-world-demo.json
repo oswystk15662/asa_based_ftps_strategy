@@ -1,0 +1,34 @@
+{
+  "grid": [".......", ".......", "..~...."],
+  "focus": ["Harbor", "Oasis", "Mine", "Frontier"],
+  "starting_roads": [
+    [[0, 1], [1, 1]], [[1, 1], [2, 1]], [[2, 1], [3, 1]],
+    [[3, 1], [4, 1]], [[4, 1], [5, 1]], [[5, 1], [6, 1]]
+  ],
+  "cities": [
+    {
+      "id": "Harbor", "faction": "Coast", "cell": [0, 1], "population": 120,
+      "stock": {"food": 96, "wood": 64, "ore": 16},
+      "renewal": {"food": 40, "wood": 20},
+      "technology": "fishing", "starting_foundation": true
+    },
+    {
+      "id": "Oasis", "faction": "Desert", "cell": [3, 1], "population": 48,
+      "stock": {"food": 2, "wood": 30, "ore": 6},
+      "renewal": {"food": 4, "wood": 12},
+      "starting_foundation": true
+    },
+    {
+      "id": "Mine", "faction": "Highlands", "cell": [6, 1], "population": 18,
+      "stock": {"food": 18, "wood": 28, "ore": 24},
+      "renewal": {"wood": 10, "ore": 24},
+      "technology": "mining", "starting_foundation": true, "starting_industry": "smelter"
+    },
+    {
+      "id": "Frontier", "faction": "Desert", "cell": [3, 0], "population": 8,
+      "stock": {"food": 12, "wood": 8},
+      "renewal": {"food": 8, "wood": 8},
+      "technology": "woodworking"
+    }
+  ]
+}
