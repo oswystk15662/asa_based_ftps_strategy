@@ -15,7 +15,7 @@ $db = Join-Path $env:TEMP ("asa-estuary-" + [guid]::NewGuid() + ".sqlite")
 & $python -m benchmarks.benchmark_civilization --ticks 80 --cities 120
 ```
 
-Linux では `python3.12` と書き込み可能な DB パスで同じモジュールを実行できる。GitHub Actions の Windows Server 2025 と Ubuntu 24.04 で、Python 3.12 の同じテスト 10 件が通過した。 [実行結果](https://github.com/oswystk15662/asa_based_ftps_strategy/actions/runs/45622168516)
+Linux では `python3.12` と書き込み可能な DB パスで同じモジュールを実行できる。GitHub Actions の Windows Server 2025 と Ubuntu 24.04 で、Python 3.12 の同じテスト 15 件が通過した。 [実行結果](https://github.com/oswystk15662/asa_based_ftps_strategy/actions/runs/45629246437)
 
 ## 現在の範囲
 
@@ -28,7 +28,7 @@ Linux では `python3.12` と書き込み可能な DB パスで同じモジュ�
 | 6 | 初期同盟、食料不足による対立、第三勢力からの物資到着による停戦。対立中は当事者間の新規輸送を停止 | 動的な国境や外交戦略、ASA の実勢力と部隊の接続 |
 | 7 | `--focus` で都市を毎 tick 更新と 4 tick 集約の間で切替。SQLite 復元と複数規模の計測 | 個体・実体の詳細度遷移、時間予算に基づく調整、実機規模測定 |
 
-コードは `simulator/civilization/` に配置。初期化は `scenario.py`、地形と領域は `terrain.py`、建設と生産は `economy.py`、輸送は `logistics.py`、外交は `diplomacy.py`、tick と資源収支は `simulation.py`、SQLite は `storage.py` が担当する。v1 の DB は次の tick で v2 の計算規則に進み、切替を `model_upgraded` に記録する。
+コードは `simulator/civilization/` に配置。初期化は `scenario.py`、地形と領域は `terrain.py`、建設と生産は `economy.py`、輸送は `logistics.py`、外交は `diplomacy.py`、tick と資源収支は `simulation.py`、SQLite は `storage.py` が担当する。v1 の DB は次の tick で v2 の計算規則に進み、切替を `model_upgraded` に記録する。旧コミットで作成した DB で、v2 に進んだ後も v1 の 16 tick 分のイベントの SHA-256 が一致した。
 
 シナリオ JSON の `road_closures` には、例えば `{"from":[0,0],"to":[1,0],"start":2,"end":4}` を配列に入れる。隣接区間が tick 2 から 3 の間閉じ、tick 4 に開く。輸送中の荷は経路を予約したまま待機し、開通後に進む。`alliances` には初期同盟を結ぶ勢力のペアを指定する。例は `[["Estuary","Upland"]]`。
 
@@ -47,5 +47,7 @@ Linux では `python3.12` と書き込み可能な DB パスで同じモジュ�
 | 60 | 27.1 | 41.2 | 135.3 |
 | 120 | 59.8 | 87.5 | 133.8 |
 | 240 | 108.6 | 194.5 | 260.2 |
+| 480 | 140.7 | 187.8 | 205.7 |
+| 960 | 235.1 | 327.2 | 338.0 |
 
-数値は外部シミュレーターの処理時間。ASA の実体数、サーバーのフレーム時間、クライアント同居時の負荷の上限は別途測定する。
+数値は外部シミュレーターの処理時間。480 都市と 960 都市の終了時は道路 6,185 区間・輸送中 69 件で、都市数を増やした試験でも輸送の探索・出荷件数制限は同じ。ASA の実体数、サーバーのフレーム時間、クライアント同居時の負荷の上限は別途測定する。
