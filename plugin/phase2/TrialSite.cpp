@@ -9,8 +9,6 @@
 
 namespace Phase2 {
 namespace {
-constexpr double SiteX = 107449.0;
-constexpr double SiteY = 211985.0;
 constexpr double SiteZ = -14421.93;
 
 bool HasSaveOption(std::wstring_view option) {
@@ -35,18 +33,23 @@ std::vector<APrimalStructure*> NearbyStructures(UWorld* world) {
         FVector position{};
         if (!actor || !actor->GetActorLocation(&position))
             continue;
-        if (std::abs(position.X - SiteX) <= 600.0 && std::abs(position.Y - SiteY) <= 600.0 &&
+        if (std::abs(position.X - TrialSiteX) <= 600.0 && std::abs(position.Y - TrialSiteY) <= 600.0 &&
             std::abs(position.Z - SiteZ) <= 1000.0)
             nearby.push_back(static_cast<APrimalStructure*>(actor));
     }
     return nearby;
 }
 
-void RequireTrial(UWorld* world, AShooterGameMode* gameMode, std::wstring_view saveOption) {
+void RequireTrialWorld(AShooterGameMode* gameMode, std::wstring_view saveOption) {
     FString map;
     gameMode->GetMapName(&map);
-    if (!HasSaveOption(saveOption) || map.ToStringUTF8() != "TheIsland_WP" ||
-        world->PlayerControllerListField().Num() != 0)
+    if (!HasSaveOption(saveOption) || map.ToStringUTF8() != "TheIsland_WP")
+        throw std::runtime_error("requires the isolated The Island trial save");
+}
+
+void RequireTrial(UWorld* world, AShooterGameMode* gameMode, std::wstring_view saveOption) {
+    RequireTrialWorld(gameMode, saveOption);
+    if (world->PlayerControllerListField().Num() != 0)
         throw std::runtime_error("requires the isolated The Island trial save with no players");
 }
 
@@ -71,7 +74,7 @@ UClass* LoadStructureClass(const wchar_t* itemPath) {
 void RequireEmptySite(UWorld* world) {
     if (!NearbyStructures(world).empty())
         throw std::runtime_error("trial cell already occupied");
-    FoundationGroundZ(world, SiteX, SiteY, 150.0, 150.0);
+    FoundationGroundZ(world, TrialSiteX, TrialSiteY, 150.0, 150.0);
 }
 
 APrimalStructure* SpawnAtTrial(UWorld* world, UClass* type) {
@@ -85,13 +88,13 @@ APrimalStructure* SpawnAtTrial(UWorld* world, UClass* type) {
     if (!std::isfinite(extent.X) || !std::isfinite(extent.Y) || std::abs(extent.X) > 400 ||
         std::abs(extent.Y) > 400 || !std::isfinite(offset.Z) || std::abs(offset.Z) > 250)
         throw std::runtime_error("structure placement geometry is outside the trial bounds");
-    const auto ground = FoundationGroundZ(world, SiteX, SiteY, std::max(150.0, std::abs(extent.X)),
+    const auto ground = FoundationGroundZ(world, TrialSiteX, TrialSiteY, std::max(150.0, std::abs(extent.X)),
                                          std::max(150.0, std::abs(extent.Y)));
     if (std::abs(ground - SiteZ) > 5.0)
         throw std::runtime_error("trial cell elevation changed");
-    Log::GetLog()->info("Trial site passed: location=({},{},{}) extent=({},{})", SiteX, SiteY,
+    Log::GetLog()->info("Trial site passed: location=({},{},{}) extent=({},{})", TrialSiteX, TrialSiteY,
                         ground + offset.Z, extent.X, extent.Y);
-    return static_cast<APrimalStructure*>(SpawnTrialActor(world, type, SiteX, SiteY, ground + offset.Z));
+    return static_cast<APrimalStructure*>(SpawnTrialActor(world, type, TrialSiteX, TrialSiteY, ground + offset.Z));
 }
 
 AActor* SpawnTrialActor(UWorld* world, UClass* type, double x, double y, double z, const char* name) {

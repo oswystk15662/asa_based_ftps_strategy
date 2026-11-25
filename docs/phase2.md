@@ -95,4 +95,10 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 - PoC 06・07・11。外見、プレイヤー接近時の挙動、外部からの移動指示と安定 ID による再起動後の照合。移動は現状の外部シミュレーターで論理的に扱う。
 - PoC 12。無人の既知区画で土台と収納箱を再起動後に観測できた。プレイヤーの接近・離脱に伴う休眠・ロード範囲の変化は未検証。
 
+### クライアント接続後の観測
+
+新規の The Island `Phase2ClientVerification` を使用。バニラへの接続を先に確認し、次に同じセーブで `ASA_PHASE2_CLIENT_TRIAL=1` を指定してプラグインを起動する。`ClientTrial.cpp` は接続人数、試験区画までの最短水平距離、区画内の構造物の件数と最大 8 件の ID・型・耐久・プレイヤー所有の有無を専用サーバーのログに記録する。距離を取得できるキャラクターがいない場合は `unobserved` と記す。 [プレイヤー位置の参照元](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/AController.h#L16)
+
+接続前、通常建築の直後、退域、再訪、再起動の順にログと画面を突き合わせる。耐久や ID が観測できても、衝突・資材消費・別のプレイヤーの利用権限は各操作で確認する。構造物が列挙されない場合は、その時点の観測不可として記録する。
+
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。

@@ -3,6 +3,7 @@
 #include "ICommands.h"
 #include "Logger/Logger.h"
 #include "Requests.h"
+#include "phase2/ClientTrial.h"
 #include "phase2/Foundation.h"
 #include "phase2/Inventory.h"
 #include "phase2/NpcSurvey.h"
@@ -40,11 +41,13 @@ struct State {
     Json pending;
     std::uint64_t ack{};
     Clock::time_point next{};
+    Clock::time_point nextClientSample{};
     std::chrono::milliseconds backoff{500};
     bool inFlight{};
     bool connected{};
     bool inspectFoundation{};
     bool surveyWater{};
+    bool clientTrial{};
     std::string foundationAction;
     std::string inventoryAction;
     std::optional<Phase2::NpcSurvey> npcSurvey;
@@ -155,6 +158,15 @@ void Tick(float) {
     if (!world || !gameMode)
         return;
 
+    if (state.clientTrial && Clock::now() >= state.nextClientSample) {
+        state.nextClientSample = Clock::now() + 5s;
+        try {
+            Phase2::LogClientTrial(world, gameMode);
+        } catch (const std::exception& error) {
+            state.clientTrial = false;
+            Log::GetLog()->error("Client trial stopped: {}", error.what());
+        }
+    }
     if (state.npcSurvey)
         state.npcSurvey->Tick(world, gameMode);
     if (state.npcTrial)
@@ -247,6 +259,7 @@ void Initialize() {
     state.build = Env("ASA_PHASE1_SERVER_BUILD");
     state.inspectFoundation = Env("ASA_PHASE2_INSPECT_FOUNDATION") == "1";
     state.surveyWater = Env("ASA_PHASE2_SURVEY_WATER") == "1";
+    state.clientTrial = Env("ASA_PHASE2_CLIENT_TRIAL") == "1";
     state.foundationAction = Env("ASA_PHASE2_FOUNDATION_POC");
     state.inventoryAction = Env("ASA_PHASE2_INVENTORY_POC");
     if (Env("ASA_PHASE2_HUMAN_NPC_SURVEY") == "1")
