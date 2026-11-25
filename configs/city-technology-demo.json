@@ -1,0 +1,24 @@
+{
+  "grid": ["...", "..."],
+  "focus": ["Coast", "Forest", "Mine"],
+  "cities": [
+    {
+      "id": "Coast", "faction": "Coast", "cell": [1, 0], "population": 12,
+      "stock": {"food": 0, "wood": 12, "ore": 2},
+      "renewal": {"food": 12, "wood": 12, "ore": 12},
+      "technology": "fishing"
+    },
+    {
+      "id": "Forest", "faction": "Forest", "cell": [0, 1], "population": 12,
+      "stock": {"food": 0, "wood": 12, "ore": 2},
+      "renewal": {"food": 12, "wood": 12, "ore": 12},
+      "technology": "woodworking"
+    },
+    {
+      "id": "Mine", "faction": "Mine", "cell": [2, 1], "population": 12,
+      "stock": {"food": 0, "wood": 12, "ore": 2},
+      "renewal": {"food": 12, "wood": 12, "ore": 12},
+      "technology": "mining"
+    }
+  ]
+}

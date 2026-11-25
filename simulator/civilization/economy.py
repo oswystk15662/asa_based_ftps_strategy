@@ -1,5 +1,6 @@
 """City production, population, and construction state."""
 from .terrain import tile_key
+from .technology import TECHNOLOGY_RESOURCE
 
 REMOTE_PERIOD = 4
 
@@ -20,9 +21,10 @@ def advance_city(sim, name, city):
     if workers != city.get("workers", {}):
         city["workers"] = workers
         sim.event("workforce", city=name, workers=workers)
+    specialty = TECHNOLOGY_RESOURCE.get(city.get("technology"))
     for resource, capacity in sorted(city["capacity"].items()):
         regenerated = min(capacity, city["nodes"][resource] + max(1, capacity // 4) * elapsed)
-        harvest = min(regenerated, workers.get(resource, 0) * elapsed)
+        harvest = min(regenerated, workers.get(resource, 0) * elapsed * (2 if resource == specialty else 1))
         city["nodes"][resource] = regenerated - harvest
         sim.stock(name, resource, harvest, "harvest", external=True)
     need = max(1, city["population"] // 10) * elapsed

@@ -5,11 +5,15 @@ on:
     paths:
       - 'simulator/**'
       - 'tests/**'
+      - 'benchmarks/**'
+      - 'configs/**'
       - '.github/workflows/simulator.yml'
   pull_request:
     paths:
       - 'simulator/**'
       - 'tests/**'
+      - 'benchmarks/**'
+      - 'configs/**'
       - '.github/workflows/simulator.yml'
 
 permissions:

@@ -1,5 +1,6 @@
 """Scenario validation and initial world state."""
 from .terrain import TERRAIN_COST, claim_territory, road_key
+from .technology import TECHNOLOGY_RESOURCE
 
 MODEL_VERSION = 2
 RESOURCES = ("food", "wood", "ore", "metal")
@@ -48,6 +49,7 @@ def initialize(scenario):
         population = entry["population"]
         stock = entry.get("stock", {})
         renewal = entry.get("renewal", {})
+        technology = entry.get("technology")
         if not isinstance(name, str) or not name or name in cities or not isinstance(faction, str) or not faction:
             raise ValueError("Each city requires a unique name and a faction")
         if not isinstance(point, list) or len(point) != 2 or any(type(n) is not int for n in point):
@@ -65,12 +67,16 @@ def initialize(scenario):
             raise ValueError("Unknown resource")
         if any(type(n) is not int or n < 0 for n in (*stock.values(), *renewal.values())):
             raise ValueError("Resource quantities must be nonnegative integers")
+        if technology is not None and (not isinstance(technology, str) or technology not in TECHNOLOGY_RESOURCE):
+            raise ValueError(f"Unknown starting technology for {name}")
         cities[name] = {
             "faction": faction, "cell": point, "population": population,
             "stock": {resource: stock.get(resource, 0) for resource in RESOURCES},
             "capacity": renewal, "nodes": renewal.copy(), "foundation": None,
             "industry": "none", "last_economy": 0, "detail": "remote",
         }
+        if technology is not None:
+            cities[name]["technology"] = technology
     if not cities:
         raise ValueError("At least one city is required")
     focus = validate_focus(cities, scenario.get("focus", []))
