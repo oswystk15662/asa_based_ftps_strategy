@@ -101,4 +101,6 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 接続前、通常建築の直後、退域、再訪、再起動の順にログと画面を突き合わせる。耐久や ID が観測できても、衝突・資材消費・別のプレイヤーの利用権限は各操作で確認する。構造物が列挙されない場合は、その時点の観測不可として記録する。
 
+2026-11-26 JST の実機試験では、ASA 98.9 のバニラ専用サーバーが 16.11 秒で起動し、UDP 17777 が `127.0.0.1` のみにバインドされた。Steam クライアントの build 26821536 の起動開始約 30 秒後に Windows が `0x139`（第1引数 `3`）のバグチェックで再起動した。クライアント接続は未確認。この回は AsaApi と MOD をロードしていない。ダンプの生成は Windows ログで確認したが、現在の権限では読めず、原因は未特定。再起動後に検証プロセスは残っておらず、既存セーブの SHA-256 は一致した。 [Microsoft のバグチェック解説](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139--kernel-security-check-failure)
+
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。
