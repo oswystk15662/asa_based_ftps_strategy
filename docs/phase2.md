@@ -105,4 +105,6 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 ユーザーがローカルにコピーしたダンプを Windows の DbgEng で解析し、停止時のカーネルスタックに BattlEye の `BEDaisy.sys` を確認した。実行ファイルとスタックが BattlEye 経路で一致するため、再試験前に調べる第一候補とする。メモリ破損が起きた箇所までは特定できていない。Steam のローカル起動設定には非公式サーバー向けの BattlEye なし起動項目があり、再試験では選択した起動モードと実行ファイルを照合する。調査中はクライアントとサーバーを起動していない。 [BattlEye のドライバー名の公開資料](https://www.battleye.com/support/faq/)
 
+同日 12:24 JST に Steam の BattlEye なし起動項目を選び、クライアント単体を試験した。Steam ログ上の実行ファイルは `ArkAscended.exe`、画面表示は ASA 98.15（CL 842240）。タイトル画面からメインメニューに進み、起動約 69 秒後に終了コード 0 で終了した。試験中に Windows の起動時刻は変わらなかった。Steam の起動項目は試験前の設定に戻した。専用サーバーとの同時起動と接続は未確認。
+
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。
