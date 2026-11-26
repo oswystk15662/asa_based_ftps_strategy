@@ -8,6 +8,7 @@
 #include "phase2/Inventory.h"
 #include "phase2/NpcSurvey.h"
 #include "phase2/NpcTrial.h"
+#include "phase2/NpcPairTrial.h"
 #include "phase2/Terrain.h"
 
 #include <algorithm>
@@ -52,6 +53,7 @@ struct State {
     std::string inventoryAction;
     std::optional<Phase2::NpcSurvey> npcSurvey;
     std::optional<Phase2::NpcTrial> npcTrial;
+    std::optional<Phase2::NpcPairTrial> npcPairTrial;
     unsigned trialStructureId{};
     bool mirrorInventory{};
 };
@@ -171,6 +173,8 @@ void Tick(float) {
         state.npcSurvey->Tick(world, gameMode);
     if (state.npcTrial)
         state.npcTrial->Tick(world, gameMode);
+    if (state.npcPairTrial)
+        state.npcPairTrial->Tick(world, gameMode);
     if (!state.foundationAction.empty()) {
         const auto action = std::exchange(state.foundationAction, {});
         try {
@@ -276,8 +280,19 @@ void Initialize() {
         state.npcTrial.emplace(std::optional{npcId});
     } else {
         const auto npcTrial = Env("ASA_PHASE2_HUMAN_NPC_TRIAL");
-        if (npcTrial == "1" || npcTrial == "move")
-            state.npcTrial.emplace(npcTrial == "move");
+        using Movement = Phase2::NpcTrial::Movement;
+        if (npcTrial == "1")
+            state.npcTrial.emplace();
+        else if (npcTrial == "move")
+            state.npcTrial.emplace(Movement::Observe);
+        else if (npcTrial == "move-stop")
+            state.npcTrial.emplace(Movement::StopAtGoal);
+        else if (npcTrial == "move-unreachable")
+            state.npcTrial.emplace(Movement::Unreachable);
+        else if (npcTrial == "move-unprojected")
+            state.npcTrial.emplace(Movement::Unprojected);
+        else if (npcTrial == "move-pair")
+            state.npcPairTrial.emplace();
     }
     if (!state.foundationAction.empty() && !state.inventoryAction.empty())
         throw std::runtime_error("enable only one trial per boot");

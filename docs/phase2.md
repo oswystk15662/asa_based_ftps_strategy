@@ -106,11 +106,23 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 新規ワールドを再作成し、同じ 3 m の移動要求を 250 ms 間隔で追試した。要求は再び受理され、最初の約 3 秒の観測で目的地の水平 22.76 cm まで接近した。約 12 秒後は 886.93 cm まで離れたため、到着後の停止は成立しなかった。離れた原因、障害物がある経路、到達不能時の報告は未確認。試験用 NPC を削除して 0 体を確認し、サーバーを終了した。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/logs/phase2-followup-20261126-141721/` と `phase2-followup-20261126-141932/`。
 
+### 平坦な区画での停止と到達不能な目標
+
+2026-11-26 JST、同じ固定ビルドと Human_NPCs_ASA file ID 9610763 で、野生環境の使い捨て `Phase2HumanNPCReflectedMove` を試行ごとに新規作成した。試験区画 `(107449, 211985)` cm と周囲の乾いた地表を使い、NPC の型、管理用の名前、非ゼロの個体 ID、区画内にいることを照合した。
+
+- `ASA_PHASE2_HUMAN_NPC_TRIAL=move-stop`。水平 80 cm を停止指示の発行条件とした。最初の試行ではネイティブの経路状態照会と停止を組み合わせた箇所で、専用サーバーだけが `EXCEPTION_ACCESS_VIOLATION` で終了した。どちらの呼び出しで終了したかは未確定。再試行では UE のリフレクションを使い、目標から 46.08 cm で `StopMovement` が戻ることを確認した。観測終了時の水平距離は 1,527.67 cm。停止指示を一度発行しても、その後の位置は維持されなかった。 [UE の停止 API](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/AIModule/AAIController/StopMovement?application_version=5.5)
+- `ASA_PHASE2_HUMAN_NPC_TRIAL=move-unreachable`。地表から 100 m 上に目標を指定し、ナビゲーションへの投影を有効にして部分経路を無効にした。`MoveToLocation` の戻り値は `2` だった。終了時の高さの差は 98.91 m で、元の指定点には到達しなかった。この試験では地上の障害物で完全に経路をふさいだケースは扱っていない。
+- `ASA_PHASE2_HUMAN_NPC_TRIAL=move-unprojected`。同じ空中目標への投影を無効にしても `2` が返った。最後に取得できた座標は目標より 99.18 m 低く、その後は管理区画の照合で試験を中断した。試験サーバーを停止し、この試行のワールドを別名で保管した。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/logs/phase2-followup-20261126-144052/`。
+
+停止試験の再試行と投影を有効にした単体試験では、NPC を削除して残存 0 体を確認した。Windows は再起動せず、既存セーブの SHA-256 は一致した。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/logs/phase2-followup-20261126-143256/` と `phase2-followup-20261126-143511/`。
+
+`ASA_PHASE2_HUMAN_NPC_TRIAL=move-pair` では、同じ無人サーバーで管理 NPC を 2 体生成した。最初の候補は斜度が 5° を超えたため、既に測定済みの平坦な区画の西側へスポーン位置を移した。再試行では別々の個体 ID を照合し、1 回のゲームスレッド処理で、一方に地上の目標、もう一方に地上 100 m の目標を指定した。両者の要求が受理され、指定した X・Y への最接近はそれぞれ 17.43 cm と 29.98 cm。空中目標の高さへの到達はこの同時試験では判定していない。終了後は両方を削除し、0 体を確認した。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/logs/phase2-followup-20261126-144052/`。 [ASA の関数検索](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/UClass.h#L70) [ASA の ProcessEvent 宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/UObject.h#L68)
+
 ## 残る Phase 2 の実機検証
 
 - PoC 04・05・13。通常建築の原料消費と設置後の歩行・衝突、無人生成した土台のクライアント表示、別区画や未ロード領域、保存の途中で異常終了した場合の照合が残る。通常 UI で設置した木の土台の表示・建築アイテム消費・再起動後の残存は確認した。外部シミュレーター上では仮想建設を再生し、占有時の予約解除と再起動後に同じ建設を二重計上しないことを確認した。
 - PoC 08・09。所有・陣営の切り替え、独立したアカウントの同時接続とトライブ間の権限、電力設備と文明シミュレーターの接続が残る。別サバイバーを順に接続した施錠済みの箱の操作、倉庫の一部変更後の復旧、発電機 1 台・照明 1 台の給電は確認した。
-- PoC 06・07・11。外見とプレイヤー接近時の挙動、到着後の停止、到達不能時の挙動、外部シミュレーターからの移動指示、別区画へ移動した個体の追跡が残る。固定ビルドと MOD 版で、生成した 1 体の再起動後の ID 照合と、ローカル起動で指定した移動先への一時的な到達を確認した。
+- PoC 06・07・11。外見とプレイヤー接近時の挙動、到着後の停止維持、地上の経路がふさがれた場合、外部シミュレーターからの移動指示、別区画へ移動した個体の追跡が残る。試験では一時的に目標へ到達し、リフレクション経由の停止要求も戻った。空中の到達不能な目標にも要求受理が返るため、完了判定には元の目標座標との照合が必要。
 - PoC 12。ハイバネーションを有効にした試験で、遠隔の土台が列挙できなくなり、接近時に同じ ID で復帰することを確認した。全構造物タイプ・区画での条件と遠隔での更新は未確認。
 
 ## 外部シミュレーターの再起動照合
@@ -165,5 +177,7 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 ### 所有者と別サバイバーの収納箱アクセス
 
 同じ複製ワールドで `ForceAllStructureLocking=True` を設定した。所有者が小型収納箱 ID `1071692263` を設置し、「施錠」の表示がある状態でインベントリを開いて木材 1 個を入れた。所有者の試験用プロフィールを退避してサーバーを再起動し、同じ Steam アカウントで別サバイバーを作成した。試験位置へ移動した後、切断して管理操作を有効にせず再接続した。同じ箱のインベントリは通常の使用・インベントリ操作で開かなかった。プラグインは箱の所有者と接続中のサバイバーの一致を `owner_connected=true → false` と記録した。独立したアカウントの同時利用とトライブ権限は未確認。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/phase2-client-visibility-permissions/`。
+
+サーバー上に複数配置した管理 NPC は、移動や衝突の試験に使える。ASA のクライアント認証とトライブ権限の試験には、それぞれログイン済みのプレイヤーが必要。UE の `SpawnPlayerController` はコントローラーを生成する処理で、固有 ID と接続を確立するログイン処理は別にある。 [UE のプレイヤーログイン](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/Engine/AGameModeBase/Login)
 
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。

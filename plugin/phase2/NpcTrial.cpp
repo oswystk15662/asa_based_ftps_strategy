@@ -1,21 +1,20 @@
 #include "API/ARK/Ark.h"
 #include "Logger/Logger.h"
+#include "NpcMovement.h"
 #include "NpcTrial.h"
 #include "Terrain.h"
 #include "TrialSite.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstddef>
 #include <stdexcept>
 
 namespace Phase2 {
 namespace {
-constexpr auto CharacterPath =
-    L"/Human_NPCs_ASA/People/ZKs_Punch_Man_BP.ZKs_Punch_Man_BP_C";
 constexpr auto ActorName = "AsaCivManagedNpcTrial";
-constexpr double X = 107449.0;
-constexpr double Y = 211985.0;
+constexpr double X = TrialSiteX;
+constexpr double Y = TrialSiteY;
 constexpr double MoveDistance = 300.0;
 
 FVector ObserveMoveGoal(UWorld* world) {
@@ -32,41 +31,6 @@ FVector ObserveMoveGoal(UWorld* world) {
     throw std::runtime_error("no observed dry movement goal in trial bounds");
 }
 
-void RequestMove(APrimalCharacter* npc, const FVector& destination) {
-    auto* controller = npc->ControllerField().Get();
-    auto* aiClass = AAIController::StaticClass();
-    if (!controller || !aiClass || !controller->ClassField()->IsChildOf(aiClass))
-        throw std::runtime_error("NPC has no AI controller for movement");
-    auto* function = controller->ClassField()->FindFunctionByName(FName("MoveToLocation"),
-                                                                   EIncludeSuperFlag::IncludeSuper);
-    alignas(16) std::byte parameters[128]{};
-    if (!function || function->PropertiesSizeField() <= 0 ||
-        function->PropertiesSizeField() > sizeof(parameters))
-        throw std::runtime_error("reflected MoveToLocation unavailable or outside parameter bounds");
-
-    const auto set = [&](const char* name, const wchar_t* value) {
-        auto* property = function->FindPropertyByName(FName(name));
-        if (!property || property->ArrayDimField() != 1 || property->Offset_InternalField() < 0 ||
-            property->ElementSizeField() <= 0 ||
-            property->Offset_InternalField() + property->ElementSizeField() > function->PropertiesSizeField() ||
-            !property->ImportText_InContainer(value, parameters, controller, 0, nullptr))
-            throw std::runtime_error("could not initialize reflected movement parameter");
-    };
-    const auto goal = fmt::format("(X={},Y={},Z={})", destination.X, destination.Y, destination.Z);
-    const std::wstring text(goal.begin(), goal.end());
-    set("Dest", text.c_str());
-    set("AcceptanceRadius", L"80");
-    set("bUsePathfinding", L"True");
-    set("bAllowPartialPath", L"False");
-    auto* result = function->FindPropertyByName(FName("ReturnValue"));
-    if (!result || result->ElementSizeField() != 1 || result->Offset_InternalField() < 0 ||
-        result->Offset_InternalField() >= function->PropertiesSizeField())
-        throw std::runtime_error("unexpected reflected movement return value");
-    controller->ProcessEvent(function, parameters);
-    Log::GetLog()->info("NPC movement response={} goal=({},{},{})",
-                        std::to_integer<unsigned>(parameters[result->Offset_InternalField()]),
-                        destination.X, destination.Y, destination.Z);
-}
 
 APrimalCharacter* FindManagedNpc(UWorld* world, UClass* type) {
     TArray<AActor*> actors;
@@ -85,31 +49,9 @@ APrimalCharacter* FindManagedNpc(UWorld* world, UClass* type) {
     return match;
 }
 
-void InitializeController(APrimalCharacter* npc) {
-    auto* aiType = AAIController::StaticClass();
-    auto* configured = npc->AIControllerClassField().uClass;
-    if (!aiType || !configured || !configured->IsChildOf(aiType)) {
-        Log::GetLog()->warn("NPC trial has no default AI controller class");
-        return;
-    }
-    auto* type = npc->ClassField();
-    if (auto* dino = APrimalDinoCharacter::StaticClass(); dino && type->IsChildOf(dino))
-        static_cast<APrimalDinoCharacter*>(npc)->SpawnDefaultController();
-    else if (auto* survivor = AShooterCharacter::StaticClass(); survivor && type->IsChildOf(survivor))
-        static_cast<AShooterCharacter*>(npc)->SpawnDefaultController();
-    else
-        npc->SpawnDefaultController();
-    Log::GetLog()->info("NPC trial explicit controller initialization attached={}",
-                        npc->ControllerField().Get() != nullptr);
-}
-
-std::uint64_t DinoId(APrimalDinoCharacter* npc) {
-    return (std::uint64_t{npc->DinoID1Field()} << 32) | npc->DinoID2Field();
-}
-
 void ProbePersistence(UWorld* world, AShooterGameMode* gameMode, std::uint64_t expectedId) {
     RequireTrial(world, gameMode, L"?AltSaveDirectoryName=Phase2HumanNPCPersistence");
-    auto* type = TSoftClassPtr<APrimalDinoCharacter>(CharacterPath).LoadSynchronous();
+    auto* type = TSoftClassPtr<APrimalDinoCharacter>(HumanNpcClassPath).LoadSynchronous();
     auto* base = APrimalDinoCharacter::StaticClass();
     if (!type || !base || !type->IsChildOf(base))
         throw std::runtime_error("NPC class does not support dino IDs");
@@ -162,15 +104,16 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
         return;
 
     const auto log = Log::GetLog();
+    const bool move = movement_ != Movement::None;
     try {
         if (persistenceId_) {
             ProbePersistence(world, gameMode, *persistenceId_);
             step_ = Finished;
             return;
         }
-        RequireTrial(world, gameMode, move_ ? L"?AltSaveDirectoryName=Phase2HumanNPCReflectedMove"
-                                           : L"?AltSaveDirectoryName=Phase2HumanNPCController");
-        auto* type = TSoftClassPtr<APrimalCharacter>(CharacterPath).LoadSynchronous();
+        RequireTrial(world, gameMode, move ? L"?AltSaveDirectoryName=Phase2HumanNPCReflectedMove"
+                                          : L"?AltSaveDirectoryName=Phase2HumanNPCController");
+        auto* type = TSoftClassPtr<APrimalCharacter>(HumanNpcClassPath).LoadSynchronous();
         if (!type)
             throw std::runtime_error("NPC character class unavailable");
         auto* npc = FindManagedNpc(world, type);
@@ -181,7 +124,7 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
             auto* actor = SpawnTrialActor(world, type, X, Y, ground + 110.0, ActorName);
             if (FindManagedNpc(world, type) != actor)
                 throw std::runtime_error("spawn did not reconcile with the managed name");
-            if (move_) {
+            if (move) {
                 auto* base = APrimalDinoCharacter::StaticClass();
                 if (!base || !type->IsChildOf(base))
                     throw std::runtime_error("movement requires an ASA dino pawn");
@@ -203,43 +146,61 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
         }
         if (!npc)
             throw std::runtime_error("managed NPC is unobserved");
-        if (move_ && DinoId(static_cast<APrimalDinoCharacter*>(npc)) != npcId_)
+        if (move && DinoId(static_cast<APrimalDinoCharacter*>(npc)) != npcId_)
             throw std::runtime_error("managed NPC ID changed");
         if (step_ == 1) {
-            if (move_ && !npc->ControllerField().Get()) {
-                auto* dino = static_cast<APrimalDinoCharacter*>(npc);
-                dino->bPreventStasis().Set(true);
-                dino->Unstasis();
-            }
-            if (!npc->ControllerField().Get())
+            if (move)
+                WakeForMovement(static_cast<APrimalDinoCharacter*>(npc));
+            else if (!npc->ControllerField().Get())
                 InitializeController(npc);
             FVector position{};
             if (npc->GetActorLocation(&position))
                 log->info("NPC trial initial position=({},{},{})", position.X, position.Y, position.Z);
-            if (move_) {
-                const auto goal = ObserveMoveGoal(world);
+            if (move) {
+                auto goal = ObserveMoveGoal(world);
+                const bool projectDestination = movement_ == Movement::Unreachable;
+                if (projectDestination || movement_ == Movement::Unprojected)
+                    goal.Z += 10'000.0;
                 goalX_ = goal.X;
                 goalY_ = goal.Y;
-                RequestMove(npc, goal);
+                goalZ_ = goal.Z;
+                const auto response = RequestMove(npc, goal, projectDestination);
+                log->info("NPC movement response={} goal=({},{},{})", response, goal.X, goal.Y, goal.Z);
             }
             ++step_;
-            next_ = move_ ? now + 250ms : now + 12s;
+            next_ = move ? now + 250ms : now + 12s;
             return;
         }
         FVector position{};
-        if (move_ && movementSamples_ < 12) {
+        const unsigned samples = movement_ == Movement::StopAtGoal ? 48 : 12;
+        if (move && movementSamples_ < samples) {
             ++movementSamples_;
             if (npc->GetActorLocation(&position)) {
+                const auto distance = std::hypot(position.X - goalX_, position.Y - goalY_);
+                if (movement_ == Movement::StopAtGoal && !stopIssued_ && distance <= 80.0) {
+                    log->info("NPC movement stop requested sample={} distance_cm={}", movementSamples_, distance);
+                    StopMove(npc);
+                    stopIssued_ = true;
+                    log->info("NPC movement stop returned sample={}", movementSamples_);
+                }
+                if (stopIssued_)
+                    maxDistanceAfterStop_ = std::max(maxDistanceAfterStop_, distance);
                 log->info("NPC movement sample={} horizontal_distance_cm={} position=({},{},{})", movementSamples_,
-                            std::hypot(position.X - goalX_, position.Y - goalY_), position.X, position.Y, position.Z);
+                            distance, position.X, position.Y, position.Z);
             }
-            next_ = movementSamples_ == 12 ? now + 9s : now + 250ms;
+            next_ = movementSamples_ == samples && movement_ != Movement::StopAtGoal ? now + 9s : now + 250ms;
             return;
         }
         if (npc->GetActorLocation(&position)) {
             log->info("NPC trial final position=({},{},{})", position.X, position.Y, position.Z);
-            if (move_)
-                log->info("NPC movement final horizontal distance_cm={}", std::hypot(position.X - goalX_, position.Y - goalY_));
+            if (move) {
+                const auto distance = std::hypot(position.X - goalX_, position.Y - goalY_);
+                log->info("NPC movement final horizontal distance_cm={} vertical_distance_cm={}",
+                          distance, std::abs(position.Z - goalZ_));
+                if (movement_ == Movement::StopAtGoal)
+                    log->info("NPC movement stop observed issued={} max_distance_after_stop_cm={}", stopIssued_,
+                              stopIssued_ ? std::max(maxDistanceAfterStop_, distance) : 0.0);
+            }
         }
         if (!npc->Destroy(false, false))
             throw std::runtime_error("engine refused to remove managed NPC");
