@@ -101,6 +101,8 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 接続前、通常建築の直後、退域、再訪、再起動の順にログと画面を突き合わせる。耐久や ID が観測できても、衝突・資材消費・別のプレイヤーの利用権限は各操作で確認する。構造物が列挙されない場合は、その時点の観測不可として記録する。
 
-2026-11-26 JST の実機試験では、ASA 98.9 のバニラ専用サーバーが 16.11 秒で起動し、UDP 17777 が `127.0.0.1` のみにバインドされた。Steam クライアントの build 26821536 の起動開始約 30 秒後に Windows が `0x139`（第1引数 `3`）のバグチェックで再起動した。クライアント接続は未確認。この回は AsaApi と MOD をロードしていない。ダンプの生成は Windows ログで確認したが、現在の権限では読めず、原因は未特定。再起動後に検証プロセスは残っておらず、既存セーブの SHA-256 は一致した。 [Microsoft のバグチェック解説](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139--kernel-security-check-failure)
+2026-11-26 JST の実機試験では、ASA 98.9 のバニラ専用サーバーが 16.11 秒で起動し、UDP 17777 が `127.0.0.1` のみにバインドされた。Steam クライアント build 26821536 は 11:51:04 に `ArkAscended_BE.exe` として起動した。指定引数には `-NoBattlEye` が含まれていた。Windows のダンプ時刻は 11:51:22 で、停止コードは `0x139`（第1引数 `3`）。クライアント接続は未確認。この回は AsaApi と MOD をロードしていない。再起動後に検証プロセスは残っておらず、既存セーブの SHA-256 は一致した。 [Microsoft のバグチェック解説](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-0x139--kernel-security-check-failure)
+
+ユーザーがローカルにコピーしたダンプを Windows の DbgEng で解析し、停止時のカーネルスタックに BattlEye の `BEDaisy.sys` を確認した。実行ファイルとスタックが BattlEye 経路で一致するため、再試験前に調べる第一候補とする。メモリ破損が起きた箇所までは特定できていない。Steam のローカル起動設定には非公式サーバー向けの BattlEye なし起動項目があり、再試験では選択した起動モードと実行ファイルを照合する。調査中はクライアントとサーバーを起動していない。 [BattlEye のドライバー名の公開資料](https://www.battleye.com/support/faq/)
 
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。
