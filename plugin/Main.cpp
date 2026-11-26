@@ -273,9 +273,12 @@ void Initialize() {
             if (error != std::errc{} || end != npcPersistence.data() + npcPersistence.size() || !npcId)
                 throw std::runtime_error("invalid Phase 2 NPC persistence ID");
         }
-        state.npcTrial.emplace(npcId);
-    } else if (Env("ASA_PHASE2_HUMAN_NPC_TRIAL") == "1")
-        state.npcTrial.emplace();
+        state.npcTrial.emplace(std::optional{npcId});
+    } else {
+        const auto npcTrial = Env("ASA_PHASE2_HUMAN_NPC_TRIAL");
+        if (npcTrial == "1" || npcTrial == "move")
+            state.npcTrial.emplace(npcTrial == "move");
+    }
     if (!state.foundationAction.empty() && !state.inventoryAction.empty())
         throw std::runtime_error("enable only one trial per boot");
     state.mirrorInventory = Env("ASA_PHASE2_INVENTORY_MIRROR") == "1";

@@ -7,17 +7,25 @@
 #include <cmath>
 #include <limits>
 #include <string_view>
+#include <vector>
 
 namespace Phase2 {
 void LogClientTrial(UWorld* world, AShooterGameMode* gameMode) {
     RequireTrialWorld(gameMode, L"?AltSaveDirectoryName=Phase2ClientVerification");
     unsigned players = 0;
+    std::vector<int> linkedPlayerIds;
     double nearest = std::numeric_limits<double>::infinity();
     for (auto& entry : world->PlayerControllerListField()) {
         const auto controller = entry.Get();
         if (!controller)
             continue;
         ++players;
+        if (auto* shooter = AShooterPlayerController::StaticClass();
+            shooter && controller->ClassField()->IsChildOf(shooter)) {
+            const auto playerId = static_cast<AShooterPlayerController*>(controller)->GetLinkedPlayerID();
+            if (playerId)
+                linkedPlayerIds.push_back(playerId);
+        }
         auto* character = controller->CharacterField().Get();
         FVector location{};
         if (character && character->GetActorLocation(&location))
@@ -35,10 +43,12 @@ void LogClientTrial(UWorld* world, AShooterGameMode* gameMode) {
         std::string_view powered = "unobserved";
         if (containerClass && actor->ClassField()->IsChildOf(containerClass))
             powered = static_cast<APrimalStructureItemContainer*>(actor)->bIsPowered().Get() ? "true" : "false";
-        log->info("Client trial structure id={} class={} health={} max_health={} player_owned={} last_stasis_time={:.3f} powered={}",
+        const auto owner = actor->OwningPlayerIDField();
+        log->info("Client trial structure id={} class={} health={} max_health={} player_owned={} last_stasis_time={:.3f} powered={} owner_connected={}",
                   actor->StructureIDField(), actor->ClassField()->NameField().ToString().ToStringUTF8(),
-                  actor->HealthField(), actor->MaxHealthField(), actor->OwningPlayerIDField() != 0,
-                  actor->LastStructureStasisTimeField(), powered);
+                  actor->HealthField(), actor->MaxHealthField(), owner != 0,
+                  actor->LastStructureStasisTimeField(), powered,
+                  owner != 0 && std::find(linkedPlayerIds.begin(), linkedPlayerIds.end(), owner) != linkedPlayerIds.end());
     }
 }
 }
