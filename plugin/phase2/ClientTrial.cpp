@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <string_view>
 
 namespace Phase2 {
 void LogClientTrial(UWorld* world, AShooterGameMode* gameMode) {
@@ -28,11 +29,16 @@ void LogClientTrial(UWorld* world, AShooterGameMode* gameMode) {
               std::isfinite(nearest) ? std::to_string(nearest) : "unobserved",
               structures.size());
     constexpr std::size_t MaxReported = 8;
+    auto* containerClass = APrimalStructureItemContainer::StaticClass();
     for (std::size_t i = 0; i < std::min(MaxReported, structures.size()); ++i) {
         auto* actor = structures[i];
-        log->info("Client trial structure id={} class={} health={} max_health={} player_owned={}",
+        std::string_view powered = "unobserved";
+        if (containerClass && actor->ClassField()->IsChildOf(containerClass))
+            powered = static_cast<APrimalStructureItemContainer*>(actor)->bIsPowered().Get() ? "true" : "false";
+        log->info("Client trial structure id={} class={} health={} max_health={} player_owned={} last_stasis_time={:.3f} powered={}",
                   actor->StructureIDField(), actor->ClassField()->NameField().ToString().ToStringUTF8(),
-                  actor->HealthField(), actor->MaxHealthField(), actor->OwningPlayerIDField() != 0);
+                  actor->HealthField(), actor->MaxHealthField(), actor->OwningPlayerIDField() != 0,
+                  actor->LastStructureStasisTimeField(), powered);
     }
 }
 }

@@ -49,6 +49,50 @@ void InitializeController(APrimalCharacter* npc) {
     Log::GetLog()->info("NPC trial explicit controller initialization attached={}",
                         npc->ControllerField().Get() != nullptr);
 }
+
+std::uint64_t DinoId(APrimalDinoCharacter* npc) {
+    return (std::uint64_t{npc->DinoID1Field()} << 32) | npc->DinoID2Field();
+}
+
+void ProbePersistence(UWorld* world, AShooterGameMode* gameMode, std::uint64_t expectedId) {
+    RequireTrial(world, gameMode, L"?AltSaveDirectoryName=Phase2HumanNPCPersistence");
+    auto* type = TSoftClassPtr<APrimalDinoCharacter>(CharacterPath).LoadSynchronous();
+    auto* base = APrimalDinoCharacter::StaticClass();
+    if (!type || !base || !type->IsChildOf(base))
+        throw std::runtime_error("NPC class does not support dino IDs");
+
+    if (!expectedId) {
+        if (FindManagedNpc(world, type))
+            throw std::runtime_error("managed NPC already present");
+        RequireEmptySite(world);
+        const auto ground = FoundationGroundZ(world, X, Y, 150.0, 150.0);
+        auto* actor = SpawnTrialActor(world, type, X, Y, ground + 110.0, ActorName);
+        if (FindManagedNpc(world, type) != actor)
+            throw std::runtime_error("NPC persistence spawn did not reconcile");
+        const auto id = DinoId(static_cast<APrimalDinoCharacter*>(actor));
+        if (!id)
+            throw std::runtime_error("managed NPC has no nonzero dino ID");
+        gameMode->SaveWorld(true, false, false);
+        Log::GetLog()->info("NPC persistence saved id={}", id);
+        return;
+    }
+
+    TArray<AActor*> actors;
+    UGameplayStatics::GetAllActorsOfClass(world, type, &actors);
+    unsigned matches = 0;
+    bool inTrialSite = false;
+    for (auto* actor : actors) {
+        if (!actor || actor->ClassField() != type ||
+            DinoId(static_cast<APrimalDinoCharacter*>(actor)) != expectedId)
+            continue;
+        ++matches;
+        FVector location{};
+        inTrialSite = actor->GetActorLocation(&location) &&
+            std::abs(location.X - X) <= 1500 && std::abs(location.Y - Y) <= 1500;
+    }
+    Log::GetLog()->info("NPC persistence verified id={} loaded_class_count={} matches={} in_trial_site={}",
+                        expectedId, actors.Num(), matches, matches == 1 && inTrialSite);
+}
 }  // namespace
 
 void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
@@ -66,6 +110,11 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
 
     const auto log = Log::GetLog();
     try {
+        if (persistenceId_) {
+            ProbePersistence(world, gameMode, *persistenceId_);
+            step_ = Finished;
+            return;
+        }
         RequireTrial(world, gameMode, L"?AltSaveDirectoryName=Phase2HumanNPCController");
         auto* type = TSoftClassPtr<APrimalCharacter>(CharacterPath).LoadSynchronous();
         if (!type)

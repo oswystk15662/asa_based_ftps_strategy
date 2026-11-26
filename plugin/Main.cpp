@@ -264,7 +264,17 @@ void Initialize() {
     state.inventoryAction = Env("ASA_PHASE2_INVENTORY_POC");
     if (Env("ASA_PHASE2_HUMAN_NPC_SURVEY") == "1")
         state.npcSurvey.emplace();
-    if (Env("ASA_PHASE2_HUMAN_NPC_TRIAL") == "1")
+    const auto npcPersistence = Env("ASA_PHASE2_HUMAN_NPC_PERSISTENCE");
+    if (!npcPersistence.empty()) {
+        std::uint64_t npcId{};
+        if (npcPersistence != "save") {
+            const auto [end, error] = std::from_chars(npcPersistence.data(),
+                npcPersistence.data() + npcPersistence.size(), npcId);
+            if (error != std::errc{} || end != npcPersistence.data() + npcPersistence.size() || !npcId)
+                throw std::runtime_error("invalid Phase 2 NPC persistence ID");
+        }
+        state.npcTrial.emplace(npcId);
+    } else if (Env("ASA_PHASE2_HUMAN_NPC_TRIAL") == "1")
         state.npcTrial.emplace();
     if (!state.foundationAction.empty() && !state.inventoryAction.empty())
         throw std::runtime_error("enable only one trial per boot");

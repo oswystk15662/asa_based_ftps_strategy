@@ -96,12 +96,14 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 `Phase2HumanNPCController` では `ASA_PHASE2_HUMAN_NPC_TRIAL=1` を設定。既定 AI クラスを照合し、`SpawnDefaultController` の明示呼び出しでコントローラーが付いたことを確認した。12 秒間の座標は一定で、削除後は 0 体。追試 `Phase2HumanNPCMove` では生成前に目的地の地表を確認した。AI 初期化のログ直後にサーバープロセスが終了し、`AAIController.MoveToLocation` の戻り値は得られなかった。終了理由は不明。試験コードからこの移動呼び出しを外し、生成・AI 初期化・削除を再現した。固定ビルドのキャッシュにある ASA の関数シグネチャは公開 UE 宣言より `bool` が一つ多い。 [ASA の既定コントローラー宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APawn.h#L64) [UE の移動 API 宣言](https://dev.epicgames.com/documentation/unreal-engine/API/Runtime/AIModule/AAIController/MoveToLocation?application_version=5.8)
 
+2026-11-26 JST、同じ ASA 98.9 / build 26749470・AsaApi 2.11（`bd376a0422291b0b1bf15a0b7868e7e275605da9`）・Human_NPCs_ASA の Windows Server file ID 9610763 で、無人の新規 `Phase2HumanNPCPersistence` を使用した。`ASA_PHASE2_HUMAN_NPC_PERSISTENCE=save` で素手の男性型を 1 体生成し、`DinoID1` と `DinoID2` を連結した非ゼロ ID `1088778715205065493` を取得してから同期保存した。検証サーバーを停止し、同じ環境変数に ID を指定して再起動すると、ロード済みの同型 1 体がその ID と試験区画に一致した。再起動後の照合には起動時のアクター名を使用しない。外部からの移動と、別区画へ移動した個体の追跡は未確認。 [ASA の個体 ID フィールド](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalDinoCharacter.h#L199-L200)
+
 ## 残る Phase 2 の実機検証
 
 - PoC 04・05・13。通常建築の原料消費と設置後の歩行・衝突、無人生成した土台のクライアント表示、別区画や未ロード領域、保存の途中で異常終了した場合の照合が残る。通常 UI で設置した木の土台の表示・建築アイテム消費・再起動後の残存は確認した。外部シミュレーター上では仮想建設を再生し、占有時の予約解除と再起動後に同じ建設を二重計上しないことを確認した。
-- PoC 08・09。所有・陣営の切り替えとプレイヤーごとの利用権限、電力状態とクライアント表示。倉庫の一部変更後の異常終了と旧チェックポイントへの復旧は、無人の単一箱・木材で確認した。
-- PoC 06・07・11。外見、プレイヤー接近時の挙動、外部からの移動指示と安定 ID による再起動後の照合。移動は現状の外部シミュレーターで論理的に扱う。
-- PoC 12。無人の既知区画で土台と収納箱を再起動後に観測できた。プレイヤーの接近・離脱に伴う休眠・ロード範囲の変化は未検証。
+- PoC 08・09。所有・陣営の切り替え、複数プレイヤーでの利用権限、電力設備と文明シミュレーターの接続が残る。倉庫の一部変更後の復旧と、発電機 1 台・照明 1 台の給電は確認した。
+- PoC 06・07・11。外見、プレイヤー接近時の挙動、外部からの移動指示、移動後の追跡。固定ビルドと MOD 版で、生成した 1 体の再起動後の ID 照合は確認した。移動は現状の外部シミュレーターで論理的に扱う。
+- PoC 12。既知の土台で近傍・退域・再訪・切断後を確認した。アクターが列挙できなくなる距離や区画、構造物のハイバネーションを有効にした場合、遠隔での更新は未確認。
 
 ## 外部シミュレーターの再起動照合
 
@@ -137,5 +139,13 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 観測を `APrimalTargetableActor::HealthField()` と `MaxHealthField()` に変更し、Windows 用 Release DLL を再ビルドして同じセーブを起動した。接続者 0 人で同じ土台 ID の耐久が 15,000／15,000 と記録され、再起動前に確認したゲーム画面と一致した。 [ASA 耐久フィールドの公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L27-L29)
 
 同日 13:00 JST に、新規 `Phase2GameSmoke` で MOD なしのバニラ専用サーバーを再確認した。`Full Startup` は 14.21 秒で、ゲーム用 UDP 17777 は `127.0.0.1` のみ。今回はサーバー単体で起動し、ワールド入場・通常建築は上記のクライアント試験の結果を使用した。
+
+### 遠隔観測と給電
+
+同日 13:32 JST から、検証セーブを複製して ASA 98.15 の BattlEye なしクライアントと ASA 98.9 の専用サーバーをデスクトップ 1 で使用した。野生生物は `DinoCountMultiplier=0.001` に抑えた。試験区画から水平 1.21 m、887.38 m、1.21 m の順で移動し、木の土台 ID `1952552443` をサーバーで読み取った。3 地点とも同じ ID、耐久 15,000／15,000 で、再訪時はクライアントにも表示された。退域後に `LastStructureStasisTime` の表示値が変わり、再訪後もその値を観測した。この回のサーバーログでは `StructureHibernation=OFF` だった。休眠時刻とアクター列挙を別々に扱い、遠隔区画での生成・更新は行っていない。 [ASA の休眠時刻フィールド](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalStructure.h#L120)
+
+同じ複製ワールドに発電機と照明を通常の建築操作で設置した。発電機は燃料なしと表示され、ガソリン 1 個を入れると起動できた。照明を点灯させ、検証ワールドの時刻を夜にして周囲が照らされることを確認した。照明を操作せずに発電機だけを停止すると、同じ照明が消灯した。
+
+プラグインを更新してサーバーを再起動し、同じ照明 ID `25992525` を再観測した。再起動後の停止中、発電機の起動後、再停止後で `APrimalStructureItemContainer::bIsPowered` が `false → true → false` と変化した。木の土台では給電値を `unobserved` とした。観測値は検証サーバーのログに記録した。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/phase2-client-followup-remote/`。 [ASA の給電状態フィールド](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalStructureItemContainer.h#L166)
 
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。
