@@ -111,12 +111,16 @@ void RunInventoryProbe(UWorld* world, AShooterGameMode* gameMode, std::string_vi
     if (!inventory || !wood)
         throw std::runtime_error("trial inventory or wood class unavailable");
 
-    if (action == "stock") {
+    if (action == "stock" || action == "stock-unsaved") {
         OnlyWoodStack(inventory, wood, 0);
         auto* item = AddWood(world, inventory, wood, 7, false);
         if (!item)
             throw std::runtime_error("engine refused to add trial wood");
         auto* stack = OnlyWoodStack(inventory, wood, 7);
+        if (action == "stock-unsaved") {
+            log->info("Inventory trial stock interrupted before world save id={} wood=7", expectedId);
+            return;
+        }
         stack->IncrementItemQuantity(-3, true, false, false, false, false, false);
         OnlyWoodStack(inventory, wood, 4);
         gameMode->SaveWorld(true, false, false);

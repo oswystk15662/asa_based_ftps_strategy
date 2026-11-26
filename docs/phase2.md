@@ -51,7 +51,9 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 | 明示保存前の強制終了 | `place-unsaved` でアクター ID 221420427 を生成した直後に `Stop-Process -Force`。ワールドファイルのハッシュには差があったが、再起動後の区画は 0 個だった。永続化は再観測で判定した |
 | 耐久と衝突の追試 | ID 454007828 は生成時・再起動後とも `GetHealth` と `GetMaxHealth` が 0、所有プレイヤー ID 0。再起動後、土台中央の Visibility トレースは土台に当たらず、地形 Z −14421.93 cm に到達した。ID 指定で削除し、再起動後に 0 個を照合 |
 
-試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`place-unsaved`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`place-unsaved` は明示保存前の異常終了を再現するための操作。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合は試験用アクターの範囲。無人生成した土台の PoC 05 の衝突・耐久は未確認。通常建築した土台でも同じ getter が 0 を返したため、無人生成の耐久は下記のフィールドを使って再計測する。 [ASA 耐久取得の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L94-L98)
+試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`place-unsaved`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`place-unsaved` は明示保存前の異常終了を再現するための操作。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合は試験用アクターの範囲。上表で使った getter は通常建築した土台でも 0 を返したため、後続試験では耐久フィールドを直接読み取った。 [ASA 耐久取得の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L94-L98)
+
+2026-11-26 JST、同じ固定ビルド・MOD なしの新規試験セーブで耐久の観測を `HealthField()` と `MaxHealthField()` に変更して再計測した。非接続時に土台を 1 個生成し、ID `1286338937`、耐久 15,000／15,000、所有プレイヤー ID 0 を確認した。同じ ID・耐久・所有状態を保存後の再起動でも読み取れた。中央の Visibility トレースは `LandscapeStreamingProxy`（Z −14421.93 cm）まで到達し、土台に当たらなかった。マップ外の照会は `unobserved`。歩行時の衝突は別途確認が必要。 [ASA 耐久フィールドの公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L27-L29)
 
 プラグインは `plugin/phase2/Terrain.cpp` が地形・水域、`plugin/phase2/Foundation.cpp` が土台のクラス解決・配置・保存照合を担当し、`plugin/Main.cpp` が起動とブリッジの制御を持つ。
 
@@ -72,6 +74,12 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 同じ箱で `ASA_PHASE2_INVENTORY_MIRROR=1` と `ASA_PHASE2_INVENTORY_ID=666419875` を設定し、外部ブリッジを `python -m simulator.phase1 --inventory-database <DB> --inventory-id 666419875` で起動した。`stock` 後の木材 4 個を SQLite へ初回記録し、ブリッジだけを再起動して同じ ASA 起動 ID で連番 1 → 2、数量 4 を照合。その後 ASA を再起動して `clear` を実行し、新しい起動 ID の連番 1 で数量 0 を確認した。同期の方向は ASA から外部台帳。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/logs/mirror-stock.log` と `mirror-restart.log`。
 
+2026-11-26 JST の異常終了試験では、新規の `Phase2Inventory` を用意し、`stock-unsaved` で空の箱に木材 7 個を追加した。減量と明示的な `SaveWorld` を行う前に、SQLite で 7 個を観測して検証サーバープロセスを強制終了した。最初の試行では再起動後も同じ箱に 7 個が残った。空を前提とする確認は拒否され、台帳には新しい起動 ID と 7 個が記録された。この試行では明示保存の有無だけでゲーム側の永続化は判断できなかった。
+
+別の新規セーブで同じ異常終了を再現した。箱 ID `1687928449` は再起動後も木材 7 個を保持し、空を要求する `stock` の再実行が拒否された。外部 SQLite を維持したまま、箱を作成した直後の空のワールドバックアップに戻した。同じ箱 ID から木材 0 個を読み取り、SQLite が新しい起動 ID の観測に追従した。旧起動 ID の hello を実ブリッジに送ると HTTP 409 となり、現在の台帳は 0 個のままだった。その後の `stock` で 4 個を記録し、さらに再起動しても同じ箱と台帳の数量は 4 個だった。生ログは `%LOCALAPPDATA%/ASA-Civilization-Phase1/logs/phase2-followup-20261126-130525/`。
+
+同日の外部ブリッジ単体試験では、SQLite の書き込みロック中に在庫観測が HTTP 503 となり、連番 0 と空の台帳を維持した。ロック解除後に同じ観測を 2 回送ると、連番 1 と木材 4 個が 1 件だけ記録された。
+
 ## PoC 11 の MOD 導入
 
 2026-11-25 JST、ASA 98.9 / Steam build 26749470 と AsaApi 2.11。専用サーバーの起動引数 `-mods=947835` で Human_NPCs_ASA を取得した。CurseForge file ID 9610763 の Windows Server 配布がインストールされ、`PrimalGameData_BP_Human_NPCs_ASA` がゲームデータとしてロードされた。導入初回の専用サーバー起動は 23.62 秒（ゲームログの Full Startup）。 [作者の配布ファイル](https://www.curseforge.com/ark-survival-ascended/mods/human_npcs_asa/files/9610763)
@@ -91,11 +99,22 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 ## 残る Phase 2 の実機検証
 
 - PoC 04・05・13。通常建築の原料消費と設置後の歩行・衝突、無人生成した土台のクライアント表示、別区画や未ロード領域、保存の途中で異常終了した場合の照合が残る。通常 UI で設置した木の土台の表示・建築アイテム消費・再起動後の残存は確認した。外部シミュレーター上では仮想建設を再生し、占有時の予約解除と再起動後に同じ建設を二重計上しないことを確認した。
-- PoC 08・09。所有・陣営の切り替えとプレイヤーごとの利用権限、電力状態とクライアント表示、在庫変更途中の復旧。
+- PoC 08・09。所有・陣営の切り替えとプレイヤーごとの利用権限、電力状態とクライアント表示。倉庫の一部変更後の異常終了と旧チェックポイントへの復旧は、無人の単一箱・木材で確認した。
 - PoC 06・07・11。外見、プレイヤー接近時の挙動、外部からの移動指示と安定 ID による再起動後の照合。移動は現状の外部シミュレーターで論理的に扱う。
 - PoC 12。無人の既知区画で土台と収納箱を再起動後に観測できた。プレイヤーの接近・離脱に伴う休眠・ロード範囲の変化は未検証。
 
-### クライアント接続後の観測
+## 外部シミュレーターの再起動照合
+
+2026-11-26 JST、Windows と Python 3.12.11 で `estuary-demo.json` と `established-world-demo.json` を各 128 tick 実行。33、66、98 tick の完了後に詳細更新対象を変更した。連続実行の状態とイベント列を、途中で SQLite を閉じて開き直した実行と比較した。両方とも完全に一致し、同じ建設コマンド ID の二重確定はなかった。これは外部シミュレーターでの結果。
+
+| シナリオ | イベント | 建設確定 | 発送 | 到着 |
+|---|---:|---:|---:|---:|
+| 河口の集落 | 1,546 | 3 | 74 | 71 |
+| 既存都市 | 1,901 | 1 | 106 | 102 |
+
+河口の集落では別途、tick 4 のイベント挿入時に Python 子プロセスを強制終了した。再起動すると状態とイベントは tick 3 まで戻り、そのまま tick 32 まで再生した状態と全 514 イベントが連続実行と一致した。
+
+## クライアント接続後の観測
 
 新規の The Island `Phase2ClientVerification` を使用。バニラへの接続を先に確認し、次に同じセーブで `ASA_PHASE2_CLIENT_TRIAL=1` を指定してプラグインを起動する。`ClientTrial.cpp` は接続人数、試験区画までの最短水平距離、区画内の構造物の件数と最大 8 件の ID・型・耐久・プレイヤー所有の有無を専用サーバーのログに記録する。距離を取得できるキャラクターがいない場合は `unobserved` と記す。 [プレイヤー位置の参照元](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/AController.h#L16)
 
@@ -116,5 +135,7 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 同じセーブを AsaApi 2.11（`bd376a0422291b0b1bf15a0b7868e7e275605da9`）と観測プラグインで起動すると、同じキャラクターで地上へ再接続でき、ログの接続人数は 0 から 1 に変わった。MOD は 0 件。試験用アイテムは管理コマンドで支給し、設置は通常のホットバー操作で行った。障害物がある位置では設置できず、空いた位置では木の土台 1 個を消費した。区画内の土台は `Floor_Wood_SM_New_C`、ID `1952552443`、プレイヤー所有として記録された。ゲーム画面では耐久 15,000／15,000 を確認した。`GetHealth()` と `GetMaxHealth()` を使ったサーバーログは 0／0 だった。保存後に再起動すると接続者 0 人で同じ ID が観測され、再接続した画面でも土台と耐久表示を確認した。
 
 観測を `APrimalTargetableActor::HealthField()` と `MaxHealthField()` に変更し、Windows 用 Release DLL を再ビルドして同じセーブを起動した。接続者 0 人で同じ土台 ID の耐久が 15,000／15,000 と記録され、再起動前に確認したゲーム画面と一致した。 [ASA 耐久フィールドの公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L27-L29)
+
+同日 13:00 JST に、新規 `Phase2GameSmoke` で MOD なしのバニラ専用サーバーを再確認した。`Full Startup` は 14.21 秒で、ゲーム用 UDP 17777 は `127.0.0.1` のみ。今回はサーバー単体で起動し、ワールド入場・通常建築は上記のクライアント試験の結果を使用した。
 
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。

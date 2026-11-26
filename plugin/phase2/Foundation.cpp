@@ -31,7 +31,7 @@ void RunFoundationProbe(UWorld* world, AShooterGameMode* gameMode, std::string_v
         if (action == "verify") {
             auto* actor = nearby.front();
             log->info("Foundation verified id={} count=1 health={} max_health={} owner_player={}",
-                      expectedId, actor->GetHealth(), actor->GetMaxHealth(), actor->OwningPlayerIDField());
+                      expectedId, actor->HealthField(), actor->MaxHealthField(), actor->OwningPlayerIDField());
             return;
         }
         if (!nearby.front()->Destroy(false, false))
@@ -53,6 +53,6 @@ void RunFoundationProbe(UWorld* world, AShooterGameMode* gameMode, std::string_v
     }
     gameMode->SaveWorld(true, false, false);
     log->info("Foundation placed and save requested id={} count=1 health={} max_health={} owner_player={}",
-              id, actor->GetHealth(), actor->GetMaxHealth(), actor->OwningPlayerIDField());
+              id, actor->HealthField(), actor->MaxHealthField(), actor->OwningPlayerIDField());
 }
 }  // namespace Phase2
