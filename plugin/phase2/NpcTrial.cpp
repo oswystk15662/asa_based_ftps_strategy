@@ -90,6 +90,36 @@ void ProbePersistence(UWorld* world, AShooterGameMode* gameMode, std::uint64_t e
 }
 }  // namespace
 
+nlohmann::json NpcTrial::Observation() const {
+    if (movement_ != Movement::External || !npcId_)
+        return nullptr;
+    const char* status = externalFailure_ ? externalFailure_ : step_ == 4 ? "finished" :
+        step_ >= 2 ? "observing" : externalCommand_.empty() ? "ready" : "queued";
+    nlohmann::json observation{{"npc_id", std::to_string(npcId_)}, {"status", status}};
+    if (!externalCommand_.empty())
+        observation["command_id"] = externalCommand_;
+    if (engineResponse_) {
+        observation["engine_response"] = *engineResponse_;
+        observation["ever_reached"] = everReached_;
+        observation["last_at_goal"] = atGoal_;
+    }
+    return observation;
+}
+
+void NpcTrial::Offer(const nlohmann::json& command) {
+    if (movement_ != Movement::External || step_ != 1 || !externalCommand_.empty() || !command.is_object())
+        return;
+    const auto id = command.find("command_id");
+    const auto npc = command.find("npc_id");
+    const auto ttl = command.find("ttl_ms");
+    if (id == command.end() || !id->is_string() || id->get_ref<const std::string&>().size() != 36 ||
+        npc == command.end() || *npc != std::to_string(npcId_) || ttl == command.end() ||
+        !ttl->is_number_unsigned() || *ttl == 0 || *ttl > 5000)
+        return;
+    externalCommand_ = id->get<std::string>();
+    externalDeadline_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(ttl->get<unsigned>());
+}
+
 void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
     using namespace std::chrono_literals;
     constexpr unsigned Finished = 4;
@@ -105,14 +135,16 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
 
     const auto log = Log::GetLog();
     const bool move = movement_ != Movement::None;
+    const bool external = movement_ == Movement::External;
     try {
         if (persistenceId_) {
             ProbePersistence(world, gameMode, *persistenceId_);
             step_ = Finished;
             return;
         }
-        RequireTrial(world, gameMode, move ? L"?AltSaveDirectoryName=Phase2HumanNPCReflectedMove"
-                                          : L"?AltSaveDirectoryName=Phase2HumanNPCController");
+        RequireTrial(world, gameMode, external ? L"?AltSaveDirectoryName=Phase2HumanNPCExternalMove" :
+                     move ? L"?AltSaveDirectoryName=Phase2HumanNPCReflectedMove" :
+                            L"?AltSaveDirectoryName=Phase2HumanNPCController");
         auto* type = TSoftClassPtr<APrimalCharacter>(HumanNpcClassPath).LoadSynchronous();
         if (!type)
             throw std::runtime_error("NPC character class unavailable");
@@ -149,6 +181,16 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
         if (move && DinoId(static_cast<APrimalDinoCharacter*>(npc)) != npcId_)
             throw std::runtime_error("managed NPC ID changed");
         if (step_ == 1) {
+            if (external && externalCommand_.empty())
+                return;
+            if (external && now >= externalDeadline_) {
+                externalFailure_ = "expired";
+                if (!npc->Destroy(false, false))
+                    throw std::runtime_error("engine refused to remove managed NPC");
+                step_ = 3;
+                next_ = now + 2s;
+                return;
+            }
             if (move)
                 WakeForMovement(static_cast<APrimalDinoCharacter*>(npc));
             else if (!npc->ControllerField().Get())
@@ -165,6 +207,10 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
                 goalY_ = goal.Y;
                 goalZ_ = goal.Z;
                 const auto response = RequestMove(npc, goal, projectDestination);
+                if (external) {
+                    engineResponse_ = response;
+                    log->info("NPC external command executed id={} npc_id={}", externalCommand_, npcId_);
+                }
                 log->info("NPC movement response={} goal=({},{},{})", response, goal.X, goal.Y, goal.Z);
             }
             ++step_;
@@ -172,11 +218,15 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
             return;
         }
         FVector position{};
-        const unsigned samples = movement_ == Movement::StopAtGoal ? 48 : 12;
+        const unsigned samples = movement_ == Movement::StopAtGoal || external ? 48 : 12;
         if (move && movementSamples_ < samples) {
             ++movementSamples_;
             if (npc->GetActorLocation(&position)) {
                 const auto distance = std::hypot(position.X - goalX_, position.Y - goalY_);
+                if (external) {
+                    atGoal_ = distance <= 80.0 && std::abs(position.Z - goalZ_) <= 150.0;
+                    everReached_ |= atGoal_;
+                }
                 if (movement_ == Movement::StopAtGoal && !stopIssued_ && distance <= 80.0) {
                     log->info("NPC movement stop requested sample={} distance_cm={}", movementSamples_, distance);
                     StopMove(npc);
@@ -188,13 +238,18 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
                 log->info("NPC movement sample={} horizontal_distance_cm={} position=({},{},{})", movementSamples_,
                             distance, position.X, position.Y, position.Z);
             }
-            next_ = movementSamples_ == samples && movement_ != Movement::StopAtGoal ? now + 9s : now + 250ms;
+            next_ = movementSamples_ == samples && movement_ != Movement::StopAtGoal && !external
+                ? now + 9s : now + 250ms;
             return;
         }
         if (npc->GetActorLocation(&position)) {
             log->info("NPC trial final position=({},{},{})", position.X, position.Y, position.Z);
             if (move) {
                 const auto distance = std::hypot(position.X - goalX_, position.Y - goalY_);
+                if (external) {
+                    atGoal_ = distance <= 80.0 && std::abs(position.Z - goalZ_) <= 150.0;
+                    everReached_ |= atGoal_;
+                }
                 log->info("NPC movement final horizontal distance_cm={} vertical_distance_cm={}",
                           distance, std::abs(position.Z - goalZ_));
                 if (movement_ == Movement::StopAtGoal)
@@ -208,6 +263,8 @@ void NpcTrial::Tick(UWorld* world, AShooterGameMode* gameMode) {
         next_ = now + 2s;
     } catch (const std::exception& error) {
         step_ = Finished;
+        if (external)
+            externalFailure_ = "aborted";
         log->error("NPC trial stopped: {}", error.what());
     }
 }

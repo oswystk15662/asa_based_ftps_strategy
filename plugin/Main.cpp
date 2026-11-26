@@ -143,6 +143,10 @@ void Receive(bool hello, bool ok, const std::string& body) {
         state.ack = ack;
         state.commandId = commandId;
         state.traces = std::move(traces);
+        if (state.npcTrial) {
+            if (const auto move = command.find("npc_move"); move != command.end())
+                state.npcTrial->Offer(*move);
+        }
         state.connected = true;
         state.backoff = 500ms;
         state.next = Clock::now() + 250ms;
@@ -221,6 +225,11 @@ void Tick(float) {
                 {"map", map.ToString()}, {"game_seconds", static_cast<double>(world->TimeSecondsField())},
                 {"players", players}
             };
+            if (state.npcTrial) {
+                auto observation = state.npcTrial->Observation();
+                if (!observation.is_null())
+                    state.pending["snapshot"]["npc_trial"] = std::move(observation);
+            }
             if (state.mirrorInventory) {
                 try {
                     const int wood = Phase2::ObserveTrialWood(world, gameMode, state.trialStructureId);
@@ -291,6 +300,8 @@ void Initialize() {
             state.npcTrial.emplace(Movement::Unreachable);
         else if (npcTrial == "move-unprojected")
             state.npcTrial.emplace(Movement::Unprojected);
+        else if (npcTrial == "move-external")
+            state.npcTrial.emplace(Movement::External);
         else if (npcTrial == "move-pair")
             state.npcPairTrial.emplace();
     }

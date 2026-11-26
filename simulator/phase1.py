@@ -31,12 +31,13 @@ class Exchange:
 
 
 class Bridge:
-    def __init__(self, world_id, traces=(), inventory_mirror=None):
+    def __init__(self, world_id, traces=(), inventory_mirror=None, npc_trial=None):
         if len(traces) > MAX_TRACES or not all(map(valid_trace, traces)):
             raise ValueError("Use up to eight traces in UE cm, each with z_high > z_low")
         self.world_id = world_id
         self.traces = [list(trace) for trace in traces]
         self.inventory_mirror = inventory_mirror
+        self.npc_trial = npc_trial
         self.session = None
 
     def handle(self, path, body):
@@ -46,12 +47,19 @@ class Bridge:
             return 409, {"error": "protocol_mismatch"}
         if body.get("world_id") != self.world_id:
             return 409, {"error": "world_mismatch"}
+        if path in ("/v1/npc-trial", "/v1/npc-move") and self.npc_trial is None:
+            return 404, {"error": "unknown_endpoint"}
+        if path == "/v1/npc-trial":
+            return 200, self.npc_trial.status(self.session)
         boot_id = body.get("boot_id")
         try:
             if str(uuid.UUID(boot_id)) != boot_id:
                 return 400, {"error": "invalid_boot_id"}
         except (AttributeError, TypeError, ValueError):
             return 400, {"error": "invalid_boot_id"}
+
+        if path == "/v1/npc-move":
+            return self.npc_trial.submit(self.session, body)
 
         if path == "/v1/hello":
             if self.session is None or self.session.boot_id != boot_id:
@@ -63,6 +71,8 @@ class Bridge:
                     logging.exception("inventory cursor unavailable")
                     return 503, {"error": "inventory_persistence_unavailable"}
                 self.session = Exchange(boot_id, str(uuid.uuid4()), ack=cursor)
+                if self.npc_trial:
+                    self.npc_trial.observe_boot(boot_id)
                 logging.info("hello boot=%s server_build=%r api_version=%r", boot_id,
                              str(body.get("server_build", ""))[:80],
                              str(body.get("api_version", ""))[:32])
@@ -114,6 +124,8 @@ class Bridge:
         command = {"kind": "observe_server", "command_id": session.command_id}
         if self.traces:
             command["terrain_traces_cm"] = self.traces
+        if self.npc_trial and (move := self.npc_trial.delivery(session)):
+            command["npc_move"] = move
         return 200, {"protocol": PROTOCOL, "world_id": self.world_id, "boot_id": boot_id,
                      "ack": session.ack, "command": command}
 
@@ -178,10 +190,10 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
-def make_server(world_id, token, port, traces=(), inventory_mirror=None):
+def make_server(world_id, token, port, traces=(), inventory_mirror=None, npc_trial=None):
     if not token or not token.isascii() or not token.isalnum() or not 16 <= len(token) <= 128:
         raise ValueError("ASA_PHASE1_TOKEN must be 16–128 ASCII letters/digits")
-    bridge = Bridge(world_id, traces, inventory_mirror)
+    bridge = Bridge(world_id, traces, inventory_mirror, npc_trial)
     server = HTTPServer(("127.0.0.1", port), Handler)
     server.authorization = f"Bearer {token}".encode("ascii")
     server.bridge = bridge
@@ -196,6 +208,7 @@ def main():
                         metavar=("X", "Y", "Z_HIGH", "Z_LOW"))
     parser.add_argument("--inventory-database")
     parser.add_argument("--inventory-id", type=int)
+    parser.add_argument("--npc-trial", action="store_true")
     args = parser.parse_args()
     logging.Formatter.converter = time.gmtime
     logging.basicConfig(level=logging.INFO, format="%(asctime)sZ %(message)s")
@@ -206,7 +219,11 @@ def main():
         if args.inventory_database is not None:
             from .inventory_mirror import open_mirror
             mirror = open_mirror(args.inventory_database, args.inventory_id)
-        server = make_server(args.world, os.environ.get("ASA_PHASE1_TOKEN", ""), args.port, args.trace, mirror)
+        npc_trial = None
+        if args.npc_trial:
+            from .npc_move_trial import NpcMoveTrial
+            npc_trial = NpcMoveTrial()
+        server = make_server(args.world, os.environ.get("ASA_PHASE1_TOKEN", ""), args.port, args.trace, mirror, npc_trial)
     except (OSError, ValueError, sqlite3.Error) as error:
         parser.error(str(error))
     with server:

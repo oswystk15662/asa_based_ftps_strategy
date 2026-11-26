@@ -4,11 +4,13 @@ from pathlib import Path
 import sys
 import threading
 import unittest
+from unittest.mock import patch
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "simulator"))
 from phase1 import MAX_BODY, make_server
 from virtual_adapter import post, sample
+from simulator.npc_move_trial import NpcMoveTrial
 
 
 class BridgeTest(unittest.TestCase):
@@ -16,8 +18,8 @@ class BridgeTest(unittest.TestCase):
     world = "phase1"
 
     @contextlib.contextmanager
-    def listener(self, port=0, traces=()):
-        server = make_server(self.world, self.token, port, traces)
+    def listener(self, port=0, traces=(), npc_trial=None):
+        server = make_server(self.world, self.token, port, traces, npc_trial=npc_trial)
         worker = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
         worker.start()
         self.port = server.server_port
@@ -119,6 +121,34 @@ class BridgeTest(unittest.TestCase):
             valid = {**exchange, "snapshot": {**sample(), "terrain": [result]}}
             self.assertEqual(200, self.request("/v1/exchange", valid)[0])
             self.assertEqual(1, server.bridge.session.ack)
+
+    def test_npc_move_requires_the_current_ready_actor_and_expires(self):
+        npc_id = str((1 << 64) - 1)
+        body = {**self.envelope, "command_id": str(uuid.uuid4()), "npc_id": npc_id}
+        with self.listener():
+            self.assertEqual(404, self.request("/v1/npc-move", body)[0])
+        with self.listener(npc_trial=NpcMoveTrial()), patch("simulator.npc_move_trial.time.monotonic") as clock:
+            clock.return_value = 100.0
+            hello = self.hello(self.envelope)
+            self.assertEqual(409, self.request("/v1/npc-move", body)[0])
+            ready = {**sample(1), "npc_trial": {"npc_id": npc_id, "status": "ready"}}
+            exchange = {**self.envelope, "seq": 1, "snapshot": ready,
+                        "command_id": hello["command"]["command_id"]}
+            self.assertEqual(200, self.request("/v1/exchange", exchange)[0])
+            self.assertEqual(409, self.request("/v1/npc-move", {**body, "npc_id": "42"})[0])
+            self.assertEqual(202, self.request("/v1/npc-move", body)[0])
+            self.assertEqual(202, self.request("/v1/npc-move", body)[0])
+            self.assertEqual(409, self.request("/v1/npc-move", {**body, "command_id": str(uuid.uuid4())})[0])
+            _, poll = self.request("/v1/exchange", exchange)
+            self.assertEqual({"command_id": body["command_id"], "npc_id": npc_id, "ttl_ms": 5000},
+                             poll["command"]["npc_move"])
+            clock.return_value = 106.0
+            _, poll = self.request("/v1/exchange", exchange)
+            self.assertNotIn("npc_move", poll["command"])
+            _, status = self.request("/v1/npc-trial", self.envelope)
+            self.assertEqual("expired", status["trial"]["status"])
+            self.hello({**self.envelope, "boot_id": str(uuid.uuid4())})
+            self.assertEqual(409, self.request("/v1/npc-move", body)[0])
 
 
 if __name__ == "__main__":
