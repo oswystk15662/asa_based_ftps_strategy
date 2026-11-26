@@ -32,7 +32,7 @@ void LogClientTrial(UWorld* world, AShooterGameMode* gameMode) {
         auto* actor = structures[i];
         log->info("Client trial structure id={} class={} health={} max_health={} player_owned={}",
                   actor->StructureIDField(), actor->ClassField()->NameField().ToString().ToStringUTF8(),
-                  actor->GetHealth(), actor->GetMaxHealth(), actor->OwningPlayerIDField() != 0);
+                  actor->HealthField(), actor->MaxHealthField(), actor->OwningPlayerIDField() != 0);
     }
 }
 }

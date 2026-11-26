@@ -51,7 +51,7 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 | 明示保存前の強制終了 | `place-unsaved` でアクター ID 221420427 を生成した直後に `Stop-Process -Force`。ワールドファイルのハッシュには差があったが、再起動後の区画は 0 個だった。永続化は再観測で判定した |
 | 耐久と衝突の追試 | ID 454007828 は生成時・再起動後とも `GetHealth` と `GetMaxHealth` が 0、所有プレイヤー ID 0。再起動後、土台中央の Visibility トレースは土台に当たらず、地形 Z −14421.93 cm に到達した。ID 指定で削除し、再起動後に 0 個を照合 |
 
-試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`place-unsaved`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`place-unsaved` は明示保存前の異常終了を再現するための操作。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合は試験用アクターの範囲。現在の無人生成経路は PoC 05 の耐久・衝突条件を満たさないため、通常建築経路の検証が必要。 [ASA 耐久取得の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L94-L98)
+試験の起動ごとに `ASA_PHASE2_FOUNDATION_POC` に `place`、`place-unsaved`、`verify`、`remove`、`verify-empty` のいずれかを指定する。`place-unsaved` は明示保存前の異常終了を再現するための操作。`verify` と `remove` は実際のログの ID を `ASA_PHASE2_FOUNDATION_ID` に設定する。起動設定とログの取り扱いは [Phase 1](phase1.md) と同じ。保存・照合は試験用アクターの範囲。無人生成した土台の PoC 05 の衝突・耐久は未確認。通常建築した土台でも同じ getter が 0 を返したため、無人生成の耐久は下記のフィールドを使って再計測する。 [ASA 耐久取得の公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L94-L98)
 
 プラグインは `plugin/phase2/Terrain.cpp` が地形・水域、`plugin/phase2/Foundation.cpp` が土台のクラス解決・配置・保存照合を担当し、`plugin/Main.cpp` が起動とブリッジの制御を持つ。
 
@@ -90,7 +90,7 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 
 ## 残る Phase 2 の実機検証
 
-- PoC 04・05・13。クライアントでの目視、通常建築経路での耐久・衝突・資材消費、別区画や未ロード領域、保存の途中で異常終了した場合の照合。外部シミュレーター上では仮想建設を再生し、占有時の予約解除と再起動後に同じ建設を二重計上しないことを確認した。
+- PoC 04・05・13。通常建築の原料消費と設置後の歩行・衝突、無人生成した土台のクライアント表示、別区画や未ロード領域、保存の途中で異常終了した場合の照合が残る。通常 UI で設置した木の土台の表示・建築アイテム消費・再起動後の残存は確認した。外部シミュレーター上では仮想建設を再生し、占有時の予約解除と再起動後に同じ建設を二重計上しないことを確認した。
 - PoC 08・09。所有・陣営の切り替えとプレイヤーごとの利用権限、電力状態とクライアント表示、在庫変更途中の復旧。
 - PoC 06・07・11。外見、プレイヤー接近時の挙動、外部からの移動指示と安定 ID による再起動後の照合。移動は現状の外部シミュレーターで論理的に扱う。
 - PoC 12。無人の既知区画で土台と収納箱を再起動後に観測できた。プレイヤーの接近・離脱に伴う休眠・ロード範囲の変化は未検証。
@@ -106,5 +106,15 @@ The Island の新規 `AltSaveDirectoryName=Phase2FoundationPlacement` で、プ�
 ユーザーがローカルにコピーしたダンプを Windows の DbgEng で解析し、停止時のカーネルスタックに BattlEye の `BEDaisy.sys` を確認した。実行ファイルとスタックが BattlEye 経路で一致するため、再試験前に調べる第一候補とする。メモリ破損が起きた箇所までは特定できていない。Steam のローカル起動設定には非公式サーバー向けの BattlEye なし起動項目があり、再試験では選択した起動モードと実行ファイルを照合する。調査中はクライアントとサーバーを起動していない。 [BattlEye のドライバー名の公開資料](https://www.battleye.com/support/faq/)
 
 同日 12:24 JST に Steam の BattlEye なし起動項目を選び、クライアント単体を試験した。Steam ログ上の実行ファイルは `ArkAscended.exe`、画面表示は ASA 98.15（CL 842240）。タイトル画面からメインメニューに進み、起動約 69 秒後に終了コード 0 で終了した。試験中に Windows の起動時刻は変わらなかった。Steam の起動項目は試験前の設定に戻した。専用サーバーとの同時起動と接続は未確認。
+
+同日 12:31 JST から、Windows のデスクトップ 1 で BattlEye なしの ASA 98.15 クライアントと ASA 98.9（サーバー build 26749470）のバニラ専用サーバーを同時起動した。サーバーのゲーム用 UDP 17777 が `127.0.0.1` に限ってバインドされることを起動ごとに確認した。最初のサーバープロセスは `EXCEPTION_ACCESS_VIOLATION` で終了し、コンソール起動オプションを外して再起動すると正常起動した。クライアントの直結はパスワード付き構成で認証拒否を受け、ループバック限定でパスワードを空にした試行では接続処理中にコミット余裕が約 1.2 GiB まで低下したため試験クライアントを停止した。Windows の起動時刻に変化はなかった。
+
+メモリ条件を変えた追試として、先の独立ワールドを退避し、同じ試験名で新規ワールドを作成した。`DinoCountMultiplier=0.001` を使用したところ、クライアント起動前のサーバーのプライベートメモリは約 10.0 GiB から約 8.0 GiB に下がった。両値は各試行の起動後の点測定。
+
+同日 12:43–12:53 JST に SOLIDWORKS と Fusion を閉じた状態で、野生生物を抑えた検証ワールドを使用した。Steam 版クライアント ASA 98.15（build 26821536、CL 842240）をデスクトップ 1 で BattlEye なしの `ArkAscended.exe` として起動した。ASA 98.9（build 26749470）のバニラ専用サーバーで接続パスワードを空にし、`open 127.0.0.1:17777` で接続した。The Island でキャラクターを作成し、南部エリア 1 から地上に入れた。同時起動中のコミット余裕は約 7.9 GiB 以上（3 秒間隔の計測）。Windows の起動時刻は変わらなかった。パスワード付きの直結は 12:31 の試行で認証拒否を受けており、成功する入力方法は未確認。
+
+同じセーブを AsaApi 2.11（`bd376a0422291b0b1bf15a0b7868e7e275605da9`）と観測プラグインで起動すると、同じキャラクターで地上へ再接続でき、ログの接続人数は 0 から 1 に変わった。MOD は 0 件。試験用アイテムは管理コマンドで支給し、設置は通常のホットバー操作で行った。障害物がある位置では設置できず、空いた位置では木の土台 1 個を消費した。区画内の土台は `Floor_Wood_SM_New_C`、ID `1952552443`、プレイヤー所有として記録された。ゲーム画面では耐久 15,000／15,000 を確認した。`GetHealth()` と `GetMaxHealth()` を使ったサーバーログは 0／0 だった。保存後に再起動すると接続者 0 人で同じ ID が観測され、再接続した画面でも土台と耐久表示を確認した。
+
+観測を `APrimalTargetableActor::HealthField()` と `MaxHealthField()` に変更し、Windows 用 Release DLL を再ビルドして同じセーブを起動した。接続者 0 人で同じ土台 ID の耐久が 15,000／15,000 と記録され、再起動前に確認したゲーム画面と一致した。 [ASA 耐久フィールドの公開宣言](https://github.com/ArkServerApi/AsaApi/blob/2.11/AsaApi/Core/Public/API/ARK/APrimalTargetableActor.h#L27-L29)
 
 Linux の仮想環境は Windows の専用サーバーと DLL の検証には不要。Linux へ Python を移せることを確かめる場合に同じテストを実行する。既存の Linux PC、CI、WSL2、仮想マシンはいずれも候補で、この PC に Linux 環境を追加する前提はない。
